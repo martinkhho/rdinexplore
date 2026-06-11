@@ -1,0 +1,4 @@
+source_name: HC Drug Product Database Digital Asset Management
+source_url: https://www.canada.ca/en/health-canada/services/drugs-health-products/drug-products/drug-product-database/what-data-extract-drug-product-database.html
+source_last_updated: 2026-06-01
+downloaded_on: 2026-06-10
