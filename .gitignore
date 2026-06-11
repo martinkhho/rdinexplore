@@ -3,8 +3,10 @@
 .RData
 .Ruserdata
 analysis/
-data/cihi/
-data/dpd/
+data/cihi/*
+!data/cihi/provenance.txt
+data/dpd/*
+!data/dpd/provenance.txt
 data/input_din_list.csv
 data/dictionary_who_atc.csv
 log/

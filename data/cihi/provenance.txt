@@ -1,0 +1,4 @@
+source_name: CIHI Formulary Coverage in the Pharmaceutical Data Tool
+source_url: https://www.cihi.ca/sites/default/files/document/formulary-coverage-data-tool-data-table-en.xlsx
+source_last_updated: 2026-05
+downloaded_on: 2026-06-10
