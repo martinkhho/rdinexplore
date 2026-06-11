@@ -89,6 +89,18 @@ ui <- fluidPage(
         margin-top: 0px !important;
         margin-bottom: 0px !important;
       }
+
+      .atc-level-1 {
+        background-color: #cfe6ff;
+      }
+
+      .atc-level-2 {
+        background-color: #e4f2ff;
+      }
+
+      .atc-level-3 {
+        background-color: #f2f8ff;
+      }
       
       .dpd-choice-wrap {
         display: flex;
@@ -494,8 +506,8 @@ server <- function(input, output, session) {
           
           # ATC1
           div(
+            class = "atc-level-1",
             style = "display:flex; justify-content:space-between; align-items:center;
-                     background-color:#cfe6ff;
                      padding:8px 10px;
                      border-radius:4px;
                      border:3px solid white;
@@ -532,8 +544,8 @@ server <- function(input, output, session) {
                 tagList(
                   
                   div(
+                    class = "atc-level-2",
                     style = "display:flex; justify-content:space-between; align-items:center;
-                             background-color:#e4f2ff;
                              padding:6px 10px;
                              border-radius:4px;
                              border:2px solid white;
@@ -569,8 +581,8 @@ server <- function(input, output, session) {
                         tagList(
                           
                           div(
+                            class = "atc-level-3",
                             style = "display:flex; justify-content:space-between; align-items:center;
-                                     background-color:#f2f8ff;
                                      padding:6px 10px;
                                      border-radius:4px;
                                      border:2px solid white;
@@ -654,8 +666,54 @@ server <- function(input, output, session) {
       FALSE
     })
   }
+
+  neutralize_cached_nested_atc_ui <- function(x) {
+    if (inherits(x, "shiny.tag")) {
+      class_attr <- x$attribs$class
+      style_attr <- x$attribs$style
+      if (!is.null(style_attr) && nzchar(style_attr)) {
+        level_class <- NULL
+        if (grepl("#a9d9b7|#cfe6ff", style_attr, ignore.case = TRUE)) {
+          level_class <- "atc-level-1"
+        } else if (grepl("#bfe4ca|#e4f2ff", style_attr, ignore.case = TRUE)) {
+          level_class <- "atc-level-2"
+        } else if (grepl("#d8efe0|#f2f8ff", style_attr, ignore.case = TRUE)) {
+          level_class <- "atc-level-3"
+        }
+
+        if (!is.null(level_class) && (is.null(class_attr) || !grepl(level_class, class_attr, fixed = TRUE))) {
+          class_bits <- if (is.null(class_attr) || !nzchar(class_attr)) {
+            character(0)
+          } else {
+            strsplit(class_attr, "\\s+")[[1]]
+          }
+          x$attribs$class <- paste(unique(c(class_bits, level_class)), collapse = " ")
+        }
+
+        style_attr <- gsub("background-color\\s*:\\s*#(?:a9d9b7|bfe4ca|d8efe0|cfe6ff|e4f2ff|f2f8ff)\\s*;?", "", style_attr, ignore.case = TRUE, perl = TRUE)
+        style_attr <- gsub(";\\s*;", ";", style_attr, perl = TRUE)
+        style_attr <- trimws(style_attr)
+        if (nzchar(style_attr)) {
+          x$attribs$style <- style_attr
+        } else {
+          x$attribs$style <- NULL
+        }
+      }
+
+      if (length(x$children) > 0) {
+        x$children <- lapply(x$children, neutralize_cached_nested_atc_ui)
+      }
+      return(x)
+    }
+
+    if (is.list(x) && length(x) > 0) {
+      return(lapply(x, neutralize_cached_nested_atc_ui))
+    }
+
+    x
+  }
   
-  rebuild_atc_structures <- function(df_atc) {
+  rebuild_atc_structures <- function(df_atc, save_cache = TRUE) {
     df_atc <- df_atc[, c("atc_code", "atc_name"), drop = FALSE]
     df_atc$atc_code <- as.character(df_atc$atc_code)
     df_atc$atc_name <- as.character(df_atc$atc_name)
@@ -723,7 +781,7 @@ server <- function(input, output, session) {
     assign("dict_who_atc4", dict_who_atc4, envir = .GlobalEnv)
     
     nested_atc_ui_cache(build_nested_atc_ui())
-    if (!isTRUE(save_atc_checklist_cache())) {
+    if (isTRUE(save_cache) && !isTRUE(save_atc_checklist_cache())) {
       log_event("WARN", "atc_checklist_cache_save_failed")
     }
   }
@@ -741,7 +799,26 @@ server <- function(input, output, session) {
       return(FALSE)
     }
     
-    rebuild_atc_structures(cache_obj$dict_who_atc)
+    dict_who_atc <<- cache_obj$dict_who_atc
+    dict_who_atc1 <<- cache_obj$dict_who_atc1
+    dict_who_atc2 <<- cache_obj$dict_who_atc2
+    dict_who_atc3 <<- cache_obj$dict_who_atc3
+    dict_who_atc4 <<- cache_obj$dict_who_atc4
+    atc1_codes <<- cache_obj$atc1_codes
+    atc2_codes <<- cache_obj$atc2_codes
+    atc3_codes <<- cache_obj$atc3_codes
+    atc4_codes <<- cache_obj$atc4_codes
+    non_leaf_codes <<- cache_obj$non_leaf_codes
+    all_atc_codes <<- cache_obj$all_atc_codes
+    all_atc_ids <<- cache_obj$all_atc_ids
+    direct_children_map <<- cache_obj$direct_children_map
+    descendants_map <<- cache_obj$descendants_map
+    nested_atc_ui_cache(neutralize_cached_nested_atc_ui(cache_obj$nested_atc_ui))
+    assign("dict_who_atc", dict_who_atc, envir = .GlobalEnv)
+    assign("dict_who_atc1", dict_who_atc1, envir = .GlobalEnv)
+    assign("dict_who_atc2", dict_who_atc2, envir = .GlobalEnv)
+    assign("dict_who_atc3", dict_who_atc3, envir = .GlobalEnv)
+    assign("dict_who_atc4", dict_who_atc4, envir = .GlobalEnv)
     atc_observers_bound(FALSE)
     TRUE
   }
