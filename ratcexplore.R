@@ -784,7 +784,7 @@ server <- function(input, output, session) {
     items <- out$items; values <- out$values
 
     if (identical(viewer_mode, "searchbar")) {
-      out <- add_row(items, values, "Explode ATCs to ATC4", if (isTRUE(finder_explode_clicked())) "Yes" else "No")
+      out <- add_row(items, values, "Explode ATCs to ATC4", if (isTRUE(!searchbar_has_unexploded_descendants(selected_codes))) "Yes" else "No")
       items <- out$items; values <- out$values
       out <- add_row(items, values, "Explode ATCs to ATC5", if (isTRUE(finder_explode_atc5_clicked())) "Yes" else "No")
       items <- out$items; values <- out$values
@@ -1161,6 +1161,7 @@ server <- function(input, output, session) {
   })
 
   atc_selected_flags <- reactive({
+    atc_data_revision()
     vapply(all_atc_ids, function(id) isTRUE(input[[id]]), logical(1))
   })
 
@@ -1439,6 +1440,7 @@ server <- function(input, output, session) {
         }
         return(NULL)
       }
+      finder_explode_clicked(FALSE)
       finder_explode_atc5_clicked(FALSE)
       finder_hidden_atc5_codes(character(0))
       finder_pending_visible_codes(character(0))
@@ -1542,6 +1544,11 @@ server <- function(input, output, session) {
 
   observeEvent(input$explode_atcs_to_atc5_checklist, {
     req(identical(current_page(), "2_atc_checklist"))
+    if (isTRUE(checklist_explode_atc5_clicked())) {
+      checklist_explode_atc5_clicked(FALSE)
+      checklist_hidden_atc5_codes(character(0))
+      return(NULL)
+    }
     selected_codes <- get_checklist_selected_codes()
     checklist_explode_atc5_clicked(TRUE)
     checklist_hidden_atc5_codes(get_atc5_codes_from_selected(selected_codes))
@@ -1617,6 +1624,8 @@ server <- function(input, output, session) {
 
   observeEvent(input$continue_btn2_searchbar_noexplode, {
     removeModal()
+    finder_explode_clicked(FALSE)
+    finder_explode_atc5_clicked(FALSE)
     selected_codes <- get_searchbar_selected_codes()
     atc_table <- finder_selection_df()
     go_to_page3("searchbar", selected_codes, atc_table)
@@ -1902,7 +1911,8 @@ server <- function(input, output, session) {
           br(),
           strong(textOutput("selected_atc5_counter", inline = TRUE)),
           div(
-            style = "margin-top:-6px; color:#666666;"
+            style = "margin-top:-6px; color:#666666;",
+            "Click the button again to cancel the ATC5 explosion."
           )
         ),
         div(
