@@ -1,8 +1,8 @@
-# Exploring Drug Identification Numbers (DINs), Health Canada's Drug Product Database (DPD), and WHO Anatomical Therapeutic Chemical (ATC) Classification [beta]
+# Exploring Drug Identification Numbers (DINs), Health Canada's Drug Product Database (DPD), and WHO Anatomical Therapeutic Chemical (ATC) Classification
 
 This repository contains three R Shiny apps for exploring Health Canada and WHO ATC data.
 
-Important: this is a beta version. Expect ongoing changes in features, outputs, and UI details. If you have any feedback, please leave a comment in GitHub or email the author (Martin Ho) at martinkh.ho@mail.utoronto.ca
+If you have any feedback, please leave a comment in GitHub or email the author (Martin Ho) at martinkh.ho@mail.utoronto.ca
 
 ## Quick Start (for users new to `renv` and Shiny)
 
@@ -35,10 +35,10 @@ High-level flow:
 
 Note for ICES researchers:
 - `rdinexplore.R` should not be used alone. Instead, it complements the `%dinexplore` SAS macro. `%dinexplore` often includes too many irrelevant DINs which requires substantial manual effort to clean. `rdinexplore.R` complements that by often including too few DINs - but every DIN it includes is likely correct.
-- It is not clear yet which option is preferable on Page 4 (Search all drugs versus Search publicly covered drugs). For now, it would be really appreciated if you can try both and provide feedback on what seems to work better.
-- To ensure that `rdinexplore.R` is not too conservative, it is recommended to select the following options on Page 5:
-  - Questions 1-3: Do not make any restrictions.
-  - Question 4: Select both PseudoDINs and Unmapped DINs
+- To ensure a good balance between being including too many or too few DINs, it is recommended to select the following options:
+  - (Page 4) Select "Search publicly covered drugs" $\rightarrow$ select "Ontario Drug Benefit Program"
+  - (Page 5) Questions 1-3: do not make any restrictions.
+  - (Page 5) Question 4: select both PseudoDINs and Unmapped DINs
 
 Outputs:
 - Downloadable files from the app:
