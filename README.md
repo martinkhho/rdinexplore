@@ -64,14 +64,14 @@ Outputs:
 
 ## App: `ratcexplore.R`
 
-Purpose: explore and export selected WHO ATC codes using either a hierarchy checklist or searchbar workflow.
+Purpose: explore and export selected WHO ATC codes using either a hierarchy checklist or searchbar workflow (can select ATC levels 1-4, with option to explode to ATC level 5).
 
 High-level flow:
 1. Choose viewer mode (`Checklist` or `Searchbar`).
 2. Choose ATC dictionary source (cached vs upload CSV).
 3. Select ATCs:
    - Checklist mode: nested hierarchy with expand/collapse.
-   - Searchbar mode: level-specific multi-select filters (ATC1 to ATC4), with optional `Explode ATCs`.
+   - Searchbar mode: level-specific multi-select filters.
 4. Review results page summary and selected ATCs, then download.
 
 Outputs:

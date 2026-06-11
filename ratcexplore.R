@@ -207,8 +207,17 @@ server <- function(input, output, session) {
   atc_saved_selected_ids <- reactiveVal(character(0))
   skip_cascade_deselect_ids <- reactiveVal(character(0))
   finder_explode_clicked <- reactiveVal(FALSE)
+  finder_explode_atc5_clicked <- reactiveVal(FALSE)
+  finder_hidden_atc5_codes <- reactiveVal(character(0))
+  finder_skip_atc5_reset <- reactiveVal(FALSE)
+  finder_pending_visible_codes <- reactiveVal(character(0))
+  checklist_explode_atc5_clicked <- reactiveVal(FALSE)
+  checklist_hidden_atc5_codes <- reactiveVal(character(0))
+  checklist_skip_atc5_reset <- reactiveVal(FALSE)
+  checklist_pending_selected_ids <- reactiveVal(character(0))
   page3_selected_codes <- reactiveVal(character(0))
-  page3_atc_table <- reactiveVal(tibble(Level = character(0), Code = character(0), Description = character(0)))
+  page3_hidden_atc5_codes <- reactiveVal(character(0))
+  page3_atc_table <- reactiveVal(tibble(level = character(0), code = character(0), description = character(0)))
 
   dict_who_atc <- tibble(atc_code = character(0), atc_name = character(0))
   dict_who_atc1 <- dict_who_atc
@@ -648,6 +657,9 @@ server <- function(input, output, session) {
     if (code_len == 5) {
       return("ATC4")
     }
+    if (code_len == 7) {
+      return("ATC5")
+    }
     paste0("ATC", code_len)
   }
 
@@ -655,15 +667,50 @@ server <- function(input, output, session) {
     code_vals <- unique(trimws(as.character(codes)))
     code_vals <- code_vals[nzchar(code_vals)]
     if (length(code_vals) == 0) {
-      return(tibble(Level = character(0), Code = character(0), Description = character(0)))
+      return(tibble(level = character(0), code = character(0), description = character(0)))
     }
 
     tibble(
-      Level = vapply(code_vals, code_to_level, character(1)),
-      Code = code_vals,
-      Description = vapply(code_vals, resolve_atc_name, character(1))
+      level = vapply(code_vals, code_to_level, character(1)),
+      code = code_vals,
+      description = vapply(code_vals, resolve_atc_name, character(1))
     ) %>%
-      arrange(Code)
+      arrange(code)
+  }
+  
+  get_atc5_codes_from_selected <- function(codes) {
+    code_vals <- unique(trimws(as.character(codes)))
+    code_vals <- code_vals[nzchar(code_vals)]
+    if (length(code_vals) == 0) {
+      return(character(0))
+    }
+    atc5_dict <- dict_who_atc %>%
+      filter(nchar(atc_code) == 7)
+    if (nrow(atc5_dict) == 0) {
+      return(character(0))
+    }
+    sort(unique(unlist(lapply(code_vals, function(code) {
+      atc5_dict$atc_code[startsWith(atc5_dict$atc_code, code)]
+    }), use.names = FALSE)))
+  }
+  
+  build_final_atc_table <- function(selected_codes, include_atc5 = FALSE, atc5_codes = character(0)) {
+    base_table <- build_atc_table_from_codes(selected_codes)
+    if (!isTRUE(include_atc5)) {
+      return(base_table)
+    }
+    if (length(atc5_codes) == 0) {
+      atc5_codes <- get_atc5_codes_from_selected(selected_codes)
+    }
+    if (length(atc5_codes) == 0) {
+      return(base_table)
+    }
+    bind_rows(
+      base_table,
+      build_atc_table_from_codes(atc5_codes)
+    ) %>%
+      distinct(level, code, description, .keep_all = TRUE) %>%
+      arrange(code)
   }
 
   atc_with_desc_from_codes <- function(codes) {
@@ -737,22 +784,27 @@ server <- function(input, output, session) {
     items <- out$items; values <- out$values
 
     if (identical(viewer_mode, "searchbar")) {
-      out <- add_row(items, values, "Explode ATCs clicked", if (isTRUE(finder_explode_clicked())) "Yes" else "No")
+      out <- add_row(items, values, "Explode ATCs to ATC4", if (isTRUE(!searchbar_has_unexploded_descendants(selected_codes))) "Yes" else "No")
+      items <- out$items; values <- out$values
+      out <- add_row(items, values, "Explode ATCs to ATC5", if (isTRUE(finder_explode_atc5_clicked())) "Yes" else "No")
+      items <- out$items; values <- out$values
+    } else {
+      out <- add_row(items, values, "Explode ATCs to ATC5", if (isTRUE(checklist_explode_atc5_clicked())) "Yes" else "No")
       items <- out$items; values <- out$values
     }
 
     if (expand_atc) {
       if (length(atc_with_desc) == 0) {
-        out <- add_row(items, values, "ATC selection", "None")
+        out <- add_row(items, values, "Selected ATC1-4 codes", "None")
         items <- out$items; values <- out$values
       } else {
         for (x in atc_with_desc) {
-          out <- add_row(items, values, "ATC selection", x)
+          out <- add_row(items, values, "Selected ATC1-4 codes", x)
           items <- out$items; values <- out$values
         }
       }
     } else {
-      out <- add_row(items, values, "ATC selections", paste0(length(selected_codes), " selected. Click the button below to show."))
+      out <- add_row(items, values, "Selected ATC1-4 codes", paste0(length(selected_codes), " selected. Click the button below to show."))
       items <- out$items; values <- out$values
     }
 
@@ -775,6 +827,8 @@ server <- function(input, output, session) {
         viewer_mode = page3_viewer_mode(),
         atc_source = page1_has_atc_choice(),
         explode_clicked = isTRUE(finder_explode_clicked()),
+        explode_atc5_clicked = isTRUE(finder_explode_atc5_clicked()),
+        include_atc5_in_final_list = if (identical(page3_viewer_mode(), "searchbar")) isTRUE(finder_explode_atc5_clicked()) else isTRUE(checklist_explode_atc5_clicked()),
         selected_atc = as.character(atc_with_desc_from_codes(page3_selected_codes()))
       )
 
@@ -1018,8 +1072,16 @@ server <- function(input, output, session) {
       log_event("INFO", "page1_to_page2_success")
       if (identical(viewer_choice, "searchbar")) {
         finder_explode_clicked(FALSE)
+        finder_explode_atc5_clicked(FALSE)
+        finder_hidden_atc5_codes(character(0))
+        finder_pending_visible_codes(character(0))
+        finder_skip_atc5_reset(FALSE)
         current_page("2_atc_searchbar")
       } else {
+        checklist_explode_atc5_clicked(FALSE)
+        checklist_hidden_atc5_codes(character(0))
+        checklist_skip_atc5_reset(FALSE)
+        checklist_pending_selected_ids(character(0))
         current_page("2_atc_checklist")
       }
     }, error = function(e) {
@@ -1099,6 +1161,7 @@ server <- function(input, output, session) {
   })
 
   atc_selected_flags <- reactive({
+    atc_data_revision()
     vapply(all_atc_ids, function(id) isTRUE(input[[id]]), logical(1))
   })
 
@@ -1107,7 +1170,11 @@ server <- function(input, output, session) {
   })
 
   output$selected_counter <- renderText({
-    paste("Number of codes selected:", selected_count())
+    paste("Number of ATC1-4 codes selected:", selected_count())
+  })
+  
+  output$selected_atc5_counter <- renderText({
+    paste("Number of ATC5 codes to be added:", length(checklist_hidden_atc5_codes()))
   })
 
   build_atc_choices <- function(df) {
@@ -1264,12 +1331,12 @@ server <- function(input, output, session) {
   selection_rows <- function(level_name, codes) {
     code_vals <- normalize_selection(codes)
     if (length(code_vals) == 0) {
-      return(tibble(Level = character(0), Code = character(0), Description = character(0)))
+      return(tibble(level = character(0), code = character(0), description = character(0)))
     }
     tibble(
-      Level = level_name,
-      Code = code_vals,
-      Description = vapply(code_vals, resolve_atc_name, character(1))
+      level = level_name,
+      code = code_vals,
+      description = vapply(code_vals, resolve_atc_name, character(1))
     )
   }
 
@@ -1281,24 +1348,26 @@ server <- function(input, output, session) {
       selection_rows("ATC3", input$finder_atc3),
       selection_rows("ATC4", input$finder_atc4)
     ) %>%
-      arrange(Code)
+      arrange(code)
   })
 
   output$finder_selected_table <- renderTable({
     df <- finder_selection_df()
     if (nrow(df) == 0) {
-      return(data.frame(Level = "None", Code = "", Description = "", check.names = FALSE))
+      return(data.frame(level = "None", code = "", description = "", check.names = FALSE))
     }
     df
   }, striped = TRUE, bordered = TRUE, spacing = "s", na = "")
 
   output$finder_selected_counter <- renderText({
-    paste("Number of codes selected:", nrow(finder_selection_df()))
+    paste("Number of ATC1-4 codes selected:", nrow(finder_selection_df()))
+  })
+  
+  output$finder_atc5_counter <- renderText({
+    paste("Number of ATC5 codes to be added:", length(finder_hidden_atc5_codes()))
   })
 
-  observeEvent(input$finder_explode_atcs, {
-    req(identical(current_page(), "2_atc_searchbar"))
-
+  explode_searchbar_selection <- function(add_hidden_atc5 = FALSE) {
     selected_codes <- unique(c(
       normalize_selection(input$finder_atc1),
       normalize_selection(input$finder_atc2),
@@ -1314,7 +1383,14 @@ server <- function(input, output, session) {
       selected_codes,
       unlist(lapply(selected_codes, get_all_descendants), use.names = FALSE)
     ))
+    hidden_atc5_codes <- if (isTRUE(add_hidden_atc5)) {
+      get_atc5_codes_from_selected(expanded_codes)
+    } else {
+      character(0)
+    }
 
+    finder_pending_visible_codes(sort(unique(expanded_codes)))
+    finder_skip_atc5_reset(TRUE)
     updateSelectizeInput(
       session,
       "finder_atc1",
@@ -1335,8 +1411,42 @@ server <- function(input, output, session) {
       "finder_atc4",
       selected = intersect(dict_who_atc4$atc_code, expanded_codes)
     )
+
     finder_explode_clicked(TRUE)
+    finder_explode_atc5_clicked(isTRUE(add_hidden_atc5))
+    finder_hidden_atc5_codes(hidden_atc5_codes)
+  }
+
+  observeEvent(input$finder_explode_atcs, {
+    req(identical(current_page(), "2_atc_searchbar"))
+    explode_searchbar_selection(add_hidden_atc5 = FALSE)
   }, ignoreInit = TRUE)
+
+  observeEvent(input$finder_explode_atcs_to_atc5, {
+    req(identical(current_page(), "2_atc_searchbar"))
+    explode_searchbar_selection(add_hidden_atc5 = TRUE)
+  }, ignoreInit = TRUE)
+
+  observeEvent(
+    list(input$finder_atc1, input$finder_atc2, input$finder_atc3, input$finder_atc4),
+    {
+      req(identical(current_page(), "2_atc_searchbar"))
+      if (isTRUE(finder_skip_atc5_reset())) {
+        current_codes <- get_searchbar_selected_codes()
+        target_codes <- sort(unique(finder_pending_visible_codes()))
+        if (identical(current_codes, target_codes)) {
+          finder_skip_atc5_reset(FALSE)
+          finder_pending_visible_codes(character(0))
+        }
+        return(NULL)
+      }
+      finder_explode_clicked(FALSE)
+      finder_explode_atc5_clicked(FALSE)
+      finder_hidden_atc5_codes(character(0))
+      finder_pending_visible_codes(character(0))
+    },
+    ignoreInit = TRUE
+  )
 
   observeEvent(input$finder_atc1_select_all, {
     req(identical(current_page(), "2_atc_searchbar"))
@@ -1416,6 +1526,33 @@ server <- function(input, output, session) {
       normalize_selection(input$finder_atc4)
     )))
   }
+  
+  observeEvent(atc_selected_flags(), {
+    req(identical(current_page(), "2_atc_checklist"))
+    if (isTRUE(checklist_skip_atc5_reset())) {
+      current_ids <- sort(get_selected_ids(all_atc_ids))
+      target_ids <- sort(unique(checklist_pending_selected_ids()))
+      if (identical(current_ids, target_ids)) {
+        checklist_skip_atc5_reset(FALSE)
+        checklist_pending_selected_ids(character(0))
+      }
+      return(NULL)
+    }
+    checklist_explode_atc5_clicked(FALSE)
+    checklist_hidden_atc5_codes(character(0))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$explode_atcs_to_atc5_checklist, {
+    req(identical(current_page(), "2_atc_checklist"))
+    if (isTRUE(checklist_explode_atc5_clicked())) {
+      checklist_explode_atc5_clicked(FALSE)
+      checklist_hidden_atc5_codes(character(0))
+      return(NULL)
+    }
+    selected_codes <- get_checklist_selected_codes()
+    checklist_explode_atc5_clicked(TRUE)
+    checklist_hidden_atc5_codes(get_atc5_codes_from_selected(selected_codes))
+  }, ignoreInit = TRUE)
 
   searchbar_has_unexploded_descendants <- function(selected_codes = get_searchbar_selected_codes()) {
     selected_codes <- unique(as.character(selected_codes))
@@ -1433,10 +1570,28 @@ server <- function(input, output, session) {
     length(setdiff(descendant_codes, selected_codes)) > 0
   }
 
-  go_to_page3 <- function(viewer_mode, selected_codes, atc_table) {
+  go_to_page3 <- function(viewer_mode, selected_codes, atc_table = NULL) {
     page3_viewer_mode(viewer_mode)
     page3_selected_codes(selected_codes)
-    page3_atc_table(atc_table)
+    if (identical(viewer_mode, "searchbar")) {
+      page3_hidden_atc5_codes(finder_hidden_atc5_codes())
+      page3_atc_table(
+        build_final_atc_table(
+          selected_codes,
+          include_atc5 = isTRUE(finder_explode_atc5_clicked()),
+          atc5_codes = finder_hidden_atc5_codes()
+        )
+      )
+    } else {
+      page3_hidden_atc5_codes(checklist_hidden_atc5_codes())
+      page3_atc_table(
+        build_final_atc_table(
+          selected_codes,
+          include_atc5 = isTRUE(checklist_explode_atc5_clicked()),
+          atc5_codes = checklist_hidden_atc5_codes()
+        )
+      )
+    }
     write_run_outputs()
     current_page("3_end")
   }
@@ -1454,7 +1609,7 @@ server <- function(input, output, session) {
     if (isTRUE(searchbar_has_unexploded_descendants(selected_codes))) {
       showModal(modalDialog(
         title = "Continue without exploding?",
-        "Some selected ATC codes still have downstream levels not selected. The code will not auto-explode your ATC selections.",
+        "Some selected ATC codes still have downstream ATC2-4 not selected. Your selected ATC codes will not be auto-exploded.",
         footer = tagList(
           modalButton("Cancel"),
           actionButton("continue_btn2_searchbar_noexplode", "Continue without exploding")
@@ -1469,6 +1624,8 @@ server <- function(input, output, session) {
 
   observeEvent(input$continue_btn2_searchbar_noexplode, {
     removeModal()
+    finder_explode_clicked(FALSE)
+    finder_explode_atc5_clicked(FALSE)
     selected_codes <- get_searchbar_selected_codes()
     atc_table <- finder_selection_df()
     go_to_page3("searchbar", selected_codes, atc_table)
@@ -1492,6 +1649,8 @@ server <- function(input, output, session) {
     bind_atc_observers()
     selected_ids <- isolate(atc_saved_selected_ids())
 
+    checklist_pending_selected_ids(sort(unique(selected_ids)))
+    checklist_skip_atc5_reset(TRUE)
     session$onFlushed(function() {
       lapply(all_atc_ids, function(id) {
         updateCheckboxInput(session, id, value = id %in% selected_ids)
@@ -1530,14 +1689,18 @@ server <- function(input, output, session) {
   )
 
   output$page3_selected_counter <- renderText({
-    paste("Number of codes selected:", length(page3_selected_codes()))
+    paste("Number of selected ATC1-4 codes:", length(page3_selected_codes()))
+  })
+  
+  output$page3_atc5_counter <- renderText({
+    paste("Number of ATC5 codes added:", length(page3_hidden_atc5_codes()))
   })
 
   output$page3_atc_list <- renderUI({
     req(current_page() == "3_end")
     atc_with_desc <- atc_with_desc_from_codes(page3_selected_codes())
     if (length(atc_with_desc) == 0) {
-      return(div("No ATC codes selected."))
+      return(div("No selected ATC1-4 codes."))
     }
     tags$ul(
       lapply(atc_with_desc, tags$li)
@@ -1733,6 +1896,26 @@ server <- function(input, output, session) {
         uiOutput("nested_atc_ui"),
         br(),
         div(
+          style = "margin-bottom:12px;",
+          div(
+            style = "display:flex; align-items:center; gap:6px;",
+            actionButton("explode_atcs_to_atc5_checklist", "Explode selected ATCs to ATC5"),
+            tags$span(
+              icon("circle-question"),
+              title = paste(
+                "By design, ATC5 codes do not appear as checklist checkboxes for selection because there are too many to review individually."
+              ),
+              style = "cursor:pointer;"
+            )
+          ),
+          br(),
+          strong(textOutput("selected_atc5_counter", inline = TRUE)),
+          div(
+            style = "margin-top:-6px; color:#666666;",
+            "Click the button again to cancel the ATC5 explosion."
+          )
+        ),
+        div(
           style = "display:flex; align-items:center; gap:10px;",
           actionButton("back_btn1", "Back"),
           actionButton("continue_btn2_checklist", "Continue")
@@ -1846,12 +2029,29 @@ server <- function(input, output, session) {
           )
         ),
         br(),
-        h4("Selected ATCs"),
-        actionButton("finder_explode_atcs", "Explode ATCs"),
+        h4("Selected ATC1-4"),
+        div(
+          style = "display:flex; align-items:center; gap:10px; flex-wrap:wrap;",
+          actionButton("finder_explode_atcs", "Explode selected ATCs to ATC4"),
+          div(
+            style = "display:flex; align-items:center; gap:6px;",
+            actionButton("finder_explode_atcs_to_atc5", "Explode selected ATCs to ATC5"),
+            tags$span(
+              icon("circle-question"),
+              title = paste(
+                "Expanding to ATC5 expands the current searchbar selection through ATC4, and also silently adds matching ATC5 codes to the final ATC list.",
+                "By design, ATC5 codes do not appear in the search fields or table for selection because there are too many to review individually."
+              ),
+              style = "cursor:pointer;"
+            )
+          )
+        ),
         br(),
         tableOutput("finder_selected_table"),
         br(),
         strong(textOutput("finder_selected_counter", inline = TRUE)),
+        br(),
+        strong(textOutput("finder_atc5_counter", inline = TRUE)),
         br(),
         br(),
         div(
@@ -1864,7 +2064,7 @@ server <- function(input, output, session) {
       tagList(
         h3("Results"),
         tableOutput("page3_summary_table"),
-        actionButton("page3_toggle_atc", "Show/Hide selected ATC codes"),
+        actionButton("page3_toggle_atc", "Show/Hide selected ATC1-4 codes"),
         hidden(
           div(
             id = "page3_atc_wrap",
@@ -1876,7 +2076,9 @@ server <- function(input, output, session) {
         br(),
         strong(textOutput("page3_selected_counter", inline = TRUE)),
         br(),
-        downloadButton("page3_download_atcs", "Download ATCs (CSV)"),
+        strong(textOutput("page3_atc5_counter", inline = TRUE)),
+        br(),
+        downloadButton("page3_download_atcs", "Download Final ATC List (CSV)"),
         br(),
         br(),
         actionButton("back_btn3", "Back")
