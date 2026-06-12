@@ -85,6 +85,18 @@ ui <- fluidPage(
         margin-bottom: 0px !important;
       }
 
+      .atc-level-1 {
+        background-color: #a9d9b7;
+      }
+
+      .atc-level-2 {
+        background-color: #bfe4ca;
+      }
+
+      .atc-level-3 {
+        background-color: #d8efe0;
+      }
+
       .dpd-choice-wrap {
         display: flex;
         gap: 14px;
@@ -257,8 +269,8 @@ server <- function(input, output, session) {
 
           # ATC1
           div(
+            class = "atc-level-1",
             style = "display:flex; justify-content:space-between; align-items:center;
-                     background-color:#a9d9b7;
                      padding:8px 10px;
                      border-radius:4px;
                      border:3px solid white;
@@ -295,8 +307,8 @@ server <- function(input, output, session) {
                 tagList(
 
                   div(
+                    class = "atc-level-2",
                     style = "display:flex; justify-content:space-between; align-items:center;
-                             background-color:#bfe4ca;
                              padding:6px 10px;
                              border-radius:4px;
                              border:2px solid white;
@@ -332,8 +344,8 @@ server <- function(input, output, session) {
                         tagList(
 
                           div(
+                            class = "atc-level-3",
                             style = "display:flex; justify-content:space-between; align-items:center;
-                                     background-color:#d8efe0;
                                      padding:6px 10px;
                                      border-radius:4px;
                                      border:2px solid white;
@@ -418,7 +430,53 @@ server <- function(input, output, session) {
     })
   }
 
-  rebuild_atc_structures <- function(df_atc) {
+  neutralize_cached_nested_atc_ui <- function(x) {
+    if (inherits(x, "shiny.tag")) {
+      class_attr <- x$attribs$class
+      style_attr <- x$attribs$style
+      if (!is.null(style_attr) && nzchar(style_attr)) {
+        level_class <- NULL
+        if (grepl("#a9d9b7|#cfe6ff", style_attr, ignore.case = TRUE)) {
+          level_class <- "atc-level-1"
+        } else if (grepl("#bfe4ca|#e4f2ff", style_attr, ignore.case = TRUE)) {
+          level_class <- "atc-level-2"
+        } else if (grepl("#d8efe0|#f2f8ff", style_attr, ignore.case = TRUE)) {
+          level_class <- "atc-level-3"
+        }
+
+        if (!is.null(level_class) && (is.null(class_attr) || !grepl(level_class, class_attr, fixed = TRUE))) {
+          class_bits <- if (is.null(class_attr) || !nzchar(class_attr)) {
+            character(0)
+          } else {
+            strsplit(class_attr, "\\s+")[[1]]
+          }
+          x$attribs$class <- paste(unique(c(class_bits, level_class)), collapse = " ")
+        }
+
+        style_attr <- gsub("background-color\\s*:\\s*#(?:a9d9b7|bfe4ca|d8efe0|cfe6ff|e4f2ff|f2f8ff)\\s*;?", "", style_attr, ignore.case = TRUE, perl = TRUE)
+        style_attr <- gsub(";\\s*;", ";", style_attr, perl = TRUE)
+        style_attr <- trimws(style_attr)
+        if (nzchar(style_attr)) {
+          x$attribs$style <- style_attr
+        } else {
+          x$attribs$style <- NULL
+        }
+      }
+
+      if (length(x$children) > 0) {
+        x$children <- lapply(x$children, neutralize_cached_nested_atc_ui)
+      }
+      return(x)
+    }
+
+    if (is.list(x) && length(x) > 0) {
+      return(lapply(x, neutralize_cached_nested_atc_ui))
+    }
+
+    x
+  }
+
+  rebuild_atc_structures <- function(df_atc, save_cache = TRUE) {
     df_atc <- df_atc[, c("atc_code", "atc_name"), drop = FALSE]
     df_atc$atc_code <- as.character(df_atc$atc_code)
     df_atc$atc_name <- as.character(df_atc$atc_name)
@@ -482,7 +540,7 @@ server <- function(input, output, session) {
     atc_observers_bound(FALSE)
     nested_atc_ui_cache(build_nested_atc_ui())
     atc_data_revision(isolate(atc_data_revision()) + 1L)
-    if (!isTRUE(save_atc_checklist_cache())) {
+    if (isTRUE(save_cache) && !isTRUE(save_atc_checklist_cache())) {
       log_event("WARN", "atc_checklist_cache_save_failed")
     }
   }
@@ -500,8 +558,23 @@ server <- function(input, output, session) {
       return(FALSE)
     }
 
-    rebuild_atc_structures(cache_obj$dict_who_atc)
+    dict_who_atc <<- cache_obj$dict_who_atc
+    dict_who_atc1 <<- cache_obj$dict_who_atc1
+    dict_who_atc2 <<- cache_obj$dict_who_atc2
+    dict_who_atc3 <<- cache_obj$dict_who_atc3
+    dict_who_atc4 <<- cache_obj$dict_who_atc4
+    atc1_codes <<- cache_obj$atc1_codes
+    atc2_codes <<- cache_obj$atc2_codes
+    atc3_codes <<- cache_obj$atc3_codes
+    atc4_codes <<- cache_obj$atc4_codes
+    non_leaf_codes <<- cache_obj$non_leaf_codes
+    all_atc_codes <<- cache_obj$all_atc_codes
+    all_atc_ids <<- cache_obj$all_atc_ids
+    direct_children_map <<- cache_obj$direct_children_map
+    descendants_map <<- cache_obj$descendants_map
+    nested_atc_ui_cache(neutralize_cached_nested_atc_ui(cache_obj$nested_atc_ui))
     atc_observers_bound(FALSE)
+    atc_data_revision(isolate(atc_data_revision()) + 1L)
     TRUE
   }
 
@@ -637,6 +710,16 @@ server <- function(input, output, session) {
     lapply(all_atc_ids, function(id) {
       updateCheckboxInput(session, id, value = FALSE)
     })
+  }
+
+  sync_button_enabled <- function(id, is_enabled) {
+    session$onFlushed(function() {
+      if (isTRUE(is_enabled)) {
+        shinyjs::enable(id)
+      } else {
+        shinyjs::disable(id)
+      }
+    }, once = TRUE)
   }
 
   get_selected_ids <- function(ids) {
@@ -1165,6 +1248,12 @@ server <- function(input, output, session) {
     vapply(all_atc_ids, function(id) isTRUE(input[[id]]), logical(1))
   })
 
+  observe({
+    req(identical(current_page(), "2_atc_checklist"))
+    atc_checked <- any(atc_selected_flags())
+    sync_button_enabled("continue_btn2_checklist", atc_checked)
+  })
+
   selected_count <- reactive({
     sum(atc_selected_flags(), na.rm = TRUE)
   })
@@ -1598,6 +1687,9 @@ server <- function(input, output, session) {
 
   observeEvent(input$continue_btn2_checklist, {
     selected_codes <- get_checklist_selected_codes()
+    if (length(selected_codes) == 0) {
+      return(NULL)
+    }
     atc_table <- build_atc_table_from_codes(selected_codes)
     go_to_page3("checklist", selected_codes, atc_table)
   }, ignoreInit = TRUE)
