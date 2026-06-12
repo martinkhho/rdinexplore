@@ -77,6 +77,23 @@ merged_cihi_dpd <- function(cihi, dpd) {
   return(merged)
 }
 
+# Counts unique API after merging DPD and CIHI (as some drugs may be missing in one)
+.merged_add_n_api <- function(merged) {
+  merged %>%
+    dplyr::mutate(
+      n_api = vapply(api, function(x) {
+          parts <- unique(trimws(unlist(strsplit(dplyr::coalesce(x, ""), " ! ", fixed = TRUE), use.names = FALSE)))
+          parts <- parts[nzchar(parts)]
+          if (length(parts) == 0) {
+            return(NA_integer_)
+          }
+          as.integer(length(parts))
+        },
+        integer(1)
+      )
+    )
+}
+
 # Formats DPD+CIHI
 merged_format <- function(merged, dict_who_atc) {
   has_any_atc <- "atc4" %in% names(merged) &&
@@ -91,11 +108,13 @@ merged_format <- function(merged, dict_who_atc) {
   }
   
   merged <- merged %>%
+    .merged_add_n_api() %>%
     dplyr::relocate(
       atc4,
       atc4_descriptor,
       din,
       api,
+      n_api,
       strength,
       formulation,
       route,

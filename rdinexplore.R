@@ -2778,6 +2778,7 @@ server <- function(input, output, session) {
       "atc4_descriptor",
       "din",
       "api",
+      "n_api",
       "strength",
       "formulation",
       "route",
