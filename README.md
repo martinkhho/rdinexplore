@@ -1,3 +1,8 @@
+<!-- badges: start -->
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/martinkhho/rdinexplore)](https://github.com/martinkhho/rdinexplore/releases/latest)
+[![DOI](https://zenodo.org/badge/1205152743.svg)](https://doi.org/10.5281/zenodo.21200313)
+<!-- badges: end -->
+
 # Exploring Drug Identification Numbers (DINs), Health Canada's Drug Product Database (DPD), and WHO Anatomical Therapeutic Chemical (ATC) Classification
 
 This repository contains three R Shiny apps for exploring Health Canada and WHO ATC data.
