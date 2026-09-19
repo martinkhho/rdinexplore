@@ -20,7 +20,7 @@ merged_dpd_cihi <- function(dpd, cihi) {
     # Flag PDINs and unmapped DINs
     dplyr::mutate(
       flag_unmapped = as.integer(!(is.na(flag_pdin) | flag_pdin == 1)),
-      flag_pdin = dplyr::if_else(is.na(flag_pdin), 0, flag_pdin)
+      flag_pdin = as.integer(dplyr::if_else(is.na(flag_pdin), 0L, flag_pdin))
     )
   return(merged)
 }
@@ -81,7 +81,7 @@ merged_cihi_dpd <- function(cihi, dpd) {
 .merged_add_n_api <- function(merged) {
   merged %>%
     dplyr::mutate(
-      n_api = vapply(api, function(x) {
+      n_api = unname(vapply(api, function(x) {
           parts <- unique(trimws(unlist(strsplit(dplyr::coalesce(x, ""), " ! ", fixed = TRUE), use.names = FALSE)))
           parts <- parts[nzchar(parts)]
           if (length(parts) == 0) {
@@ -90,7 +90,7 @@ merged_cihi_dpd <- function(cihi, dpd) {
           as.integer(length(parts))
         },
         integer(1)
-      )
+      ))
     )
 }
 

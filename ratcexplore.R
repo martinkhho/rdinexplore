@@ -11,6 +11,8 @@ library(dplyr)
 library(tibble)
 library(stringr)
 
+source(here("./src/atc_explore.R"))
+
 
 
 # User Interface ---------------------------------------------------------------
@@ -477,65 +479,23 @@ server <- function(input, output, session) {
   }
 
   rebuild_atc_structures <- function(df_atc, save_cache = TRUE) {
-    df_atc <- df_atc[, c("atc_code", "atc_name"), drop = FALSE]
-    df_atc$atc_code <- as.character(df_atc$atc_code)
-    df_atc$atc_name <- as.character(df_atc$atc_name)
-    df_atc <- df_atc %>%
-      mutate(
-        atc_code = str_to_upper(trimws(atc_code)),
-        atc_name = trimws(atc_name)
-      ) %>%
-      filter(!is.na(atc_code), nzchar(atc_code)) %>%
-      group_by(atc_code) %>%
-      summarise(
-        atc_name = {
-          name_vals <- atc_name[!is.na(atc_name) & nzchar(atc_name)]
-          if (length(name_vals) == 0) NA_character_ else name_vals[[1]]
-        },
-        .groups = "drop"
-      )
+    hierarchy <- atc_build_hierarchy(df_atc)
 
-    dict_who_atc <<- df_atc
-    dict_who_atc1 <<- filter(dict_who_atc, nchar(atc_code) == 1)
-    dict_who_atc2 <<- filter(dict_who_atc, nchar(atc_code) == 3)
-    dict_who_atc3 <<- filter(dict_who_atc, nchar(atc_code) == 4)
-    dict_who_atc4 <<- filter(dict_who_atc, nchar(atc_code) == 5)
+    dict_who_atc <<- hierarchy$dictionary
+    dict_who_atc1 <<- hierarchy$by_level$atc1
+    dict_who_atc2 <<- hierarchy$by_level$atc2
+    dict_who_atc3 <<- hierarchy$by_level$atc3
+    dict_who_atc4 <<- hierarchy$by_level$atc4
 
-    atc1_codes <<- dict_who_atc1$atc_code
-    atc2_codes <<- dict_who_atc2$atc_code
-    atc3_codes <<- dict_who_atc3$atc_code
-    atc4_codes <<- dict_who_atc4$atc_code
-    non_leaf_codes <<- c(atc1_codes, atc2_codes, atc3_codes)
-    all_atc_codes <<- c(non_leaf_codes, atc4_codes)
-    all_atc_ids <<- paste0("atc_", all_atc_codes)
-
-    direct_children_map_local <- setNames(
-      vector("list", length(non_leaf_codes)),
-      non_leaf_codes
-    )
-    for (code in atc1_codes) {
-      direct_children_map_local[[code]] <- atc2_codes[startsWith(atc2_codes, code)]
-    }
-    for (code in atc2_codes) {
-      direct_children_map_local[[code]] <- atc3_codes[startsWith(atc3_codes, code)]
-    }
-    for (code in atc3_codes) {
-      direct_children_map_local[[code]] <- atc4_codes[startsWith(atc4_codes, code)]
-    }
-    direct_children_map <<- direct_children_map_local
-
-    descendants_map_local <- setNames(
-      vector("list", length(all_atc_codes)),
-      all_atc_codes
-    )
-    for (code in all_atc_codes) {
-      descendants_map_local[[code]] <- c(
-        atc2_codes[startsWith(atc2_codes, code)],
-        atc3_codes[startsWith(atc3_codes, code)],
-        atc4_codes[startsWith(atc4_codes, code)]
-      )
-    }
-    descendants_map <<- descendants_map_local
+    atc1_codes <<- hierarchy$codes$atc1
+    atc2_codes <<- hierarchy$codes$atc2
+    atc3_codes <<- hierarchy$codes$atc3
+    atc4_codes <<- hierarchy$codes$atc4
+    non_leaf_codes <<- hierarchy$non_leaf_codes
+    all_atc_codes <<- hierarchy$all_codes
+    all_atc_ids <<- hierarchy$all_ids
+    direct_children_map <<- hierarchy$direct_children
+    descendants_map <<- hierarchy$descendants
 
     atc_observers_bound(FALSE)
     nested_atc_ui_cache(build_nested_atc_ui())
@@ -727,73 +687,24 @@ server <- function(input, output, session) {
   }
 
   code_to_level <- function(code) {
-    code_len <- nchar(code)
-    if (code_len == 1) {
-      return("ATC1")
-    }
-    if (code_len == 3) {
-      return("ATC2")
-    }
-    if (code_len == 4) {
-      return("ATC3")
-    }
-    if (code_len == 5) {
-      return("ATC4")
-    }
-    if (code_len == 7) {
-      return("ATC5")
-    }
-    paste0("ATC", code_len)
+    atc_code_to_level(code)
   }
 
   build_atc_table_from_codes <- function(codes) {
-    code_vals <- unique(trimws(as.character(codes)))
-    code_vals <- code_vals[nzchar(code_vals)]
-    if (length(code_vals) == 0) {
-      return(tibble(level = character(0), code = character(0), description = character(0)))
-    }
-
-    tibble(
-      level = vapply(code_vals, code_to_level, character(1)),
-      code = code_vals,
-      description = vapply(code_vals, resolve_atc_name, character(1))
-    ) %>%
-      arrange(code)
+    atc_build_table(codes, dict_who_atc)
   }
   
   get_atc5_codes_from_selected <- function(codes) {
-    code_vals <- unique(trimws(as.character(codes)))
-    code_vals <- code_vals[nzchar(code_vals)]
-    if (length(code_vals) == 0) {
-      return(character(0))
-    }
-    atc5_dict <- dict_who_atc %>%
-      filter(nchar(atc_code) == 7)
-    if (nrow(atc5_dict) == 0) {
-      return(character(0))
-    }
-    sort(unique(unlist(lapply(code_vals, function(code) {
-      atc5_dict$atc_code[startsWith(atc5_dict$atc_code, code)]
-    }), use.names = FALSE)))
+    atc_get_atc5_codes(codes, dict_who_atc)
   }
   
   build_final_atc_table <- function(selected_codes, include_atc5 = FALSE, atc5_codes = character(0)) {
-    base_table <- build_atc_table_from_codes(selected_codes)
-    if (!isTRUE(include_atc5)) {
-      return(base_table)
-    }
-    if (length(atc5_codes) == 0) {
-      atc5_codes <- get_atc5_codes_from_selected(selected_codes)
-    }
-    if (length(atc5_codes) == 0) {
-      return(base_table)
-    }
-    bind_rows(
-      base_table,
-      build_atc_table_from_codes(atc5_codes)
-    ) %>%
-      distinct(level, code, description, .keep_all = TRUE) %>%
-      arrange(code)
+    atc_build_final_table(
+      selected_codes,
+      dict_who_atc,
+      include_atc5 = include_atc5,
+      atc5_codes = atc5_codes
+    )
   }
 
   atc_with_desc_from_codes <- function(codes) {
@@ -1468,10 +1379,8 @@ server <- function(input, output, session) {
       return(NULL)
     }
 
-    expanded_codes <- unique(c(
-      selected_codes,
-      unlist(lapply(selected_codes, get_all_descendants), use.names = FALSE)
-    ))
+    hierarchy <- list(descendants = descendants_map)
+    expanded_codes <- atc_expand_selection(selected_codes, hierarchy)
     hidden_atc5_codes <- if (isTRUE(add_hidden_atc5)) {
       get_atc5_codes_from_selected(expanded_codes)
     } else {

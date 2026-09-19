@@ -15,6 +15,7 @@ source(here("./src/cihi_load.R"))
 source(here("./src/dpd_clean.R"))
 source(here("./src/cihi_clean.R"))
 source(here("./src/merged_clean.R"))
+source(here("./src/atc_explore.R"))
 
 DATA_DIR <- here("./data/")
 dict_dpd_atc <- read_csv(file.path(DATA_DIR, "dictionary_dpd_atc.csv"), show_col_types = FALSE)
@@ -714,65 +715,23 @@ server <- function(input, output, session) {
   }
   
   rebuild_atc_structures <- function(df_atc, save_cache = TRUE) {
-    df_atc <- df_atc[, c("atc_code", "atc_name"), drop = FALSE]
-    df_atc$atc_code <- as.character(df_atc$atc_code)
-    df_atc$atc_name <- as.character(df_atc$atc_name)
-    df_atc <- df_atc %>%
-      dplyr::mutate(
-        atc_code = stringr::str_to_upper(trimws(atc_code)),
-        atc_name = trimws(atc_name)
-      ) %>%
-      dplyr::filter(!is.na(atc_code), nzchar(atc_code)) %>%
-      dplyr::group_by(atc_code) %>%
-      dplyr::summarise(
-        atc_name = {
-          name_vals <- atc_name[!is.na(atc_name) & nzchar(atc_name)]
-          if (length(name_vals) == 0) NA_character_ else name_vals[[1]]
-        },
-        .groups = "drop"
-      )
-    
-    dict_who_atc <<- df_atc
-    dict_who_atc1 <<- filter(dict_who_atc, nchar(atc_code) == 1)
-    dict_who_atc2 <<- filter(dict_who_atc, nchar(atc_code) == 3)
-    dict_who_atc3 <<- filter(dict_who_atc, nchar(atc_code) == 4)
-    dict_who_atc4 <<- filter(dict_who_atc, nchar(atc_code) == 5)
-    
-    atc1_codes <<- dict_who_atc1$atc_code
-    atc2_codes <<- dict_who_atc2$atc_code
-    atc3_codes <<- dict_who_atc3$atc_code
-    atc4_codes <<- dict_who_atc4$atc_code
-    non_leaf_codes <<- c(atc1_codes, atc2_codes, atc3_codes)
-    all_atc_codes <<- c(non_leaf_codes, atc4_codes)
-    all_atc_ids <<- paste0("atc_", all_atc_codes)
-    
-    direct_children_map_local <- setNames(
-      vector("list", length(non_leaf_codes)),
-      non_leaf_codes
-    )
-    for (code in atc1_codes) {
-      direct_children_map_local[[code]] <- atc2_codes[startsWith(atc2_codes, code)]
-    }
-    for (code in atc2_codes) {
-      direct_children_map_local[[code]] <- atc3_codes[startsWith(atc3_codes, code)]
-    }
-    for (code in atc3_codes) {
-      direct_children_map_local[[code]] <- atc4_codes[startsWith(atc4_codes, code)]
-    }
-    direct_children_map <<- direct_children_map_local
-    
-    descendants_map_local <- setNames(
-      vector("list", length(all_atc_codes)),
-      all_atc_codes
-    )
-    for (code in all_atc_codes) {
-      descendants_map_local[[code]] <- c(
-        atc2_codes[startsWith(atc2_codes, code)],
-        atc3_codes[startsWith(atc3_codes, code)],
-        atc4_codes[startsWith(atc4_codes, code)]
-      )
-    }
-    descendants_map <<- descendants_map_local
+    hierarchy <- atc_build_hierarchy(df_atc)
+
+    dict_who_atc <<- hierarchy$dictionary
+    dict_who_atc1 <<- hierarchy$by_level$atc1
+    dict_who_atc2 <<- hierarchy$by_level$atc2
+    dict_who_atc3 <<- hierarchy$by_level$atc3
+    dict_who_atc4 <<- hierarchy$by_level$atc4
+
+    atc1_codes <<- hierarchy$codes$atc1
+    atc2_codes <<- hierarchy$codes$atc2
+    atc3_codes <<- hierarchy$codes$atc3
+    atc4_codes <<- hierarchy$codes$atc4
+    non_leaf_codes <<- hierarchy$non_leaf_codes
+    all_atc_codes <<- hierarchy$all_codes
+    all_atc_ids <<- hierarchy$all_ids
+    direct_children_map <<- hierarchy$direct_children
+    descendants_map <<- hierarchy$descendants
     
     assign("dict_who_atc", dict_who_atc, envir = .GlobalEnv)
     assign("dict_who_atc1", dict_who_atc1, envir = .GlobalEnv)
