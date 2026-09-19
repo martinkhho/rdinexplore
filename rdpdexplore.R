@@ -226,24 +226,26 @@ server <- function(input, output, session) {
     x_chr
   }
 
-  safe_read_date_field <- function(path, field) {
+  safe_read_provenance_field <- function(path, section, field) {
     tryCatch(
-      read_date_field(path, field),
+      read_provenance_field(path, section, field),
       error = function(e) NA
     )
   }
 
   refresh_provenance_dates <- function() {
     dpd_last_downloaded(
-      safe_read_date_field(
-        file.path(app_data_dir, "./dpd/provenance.txt"),
-        "downloaded_on"
-      )
+      substr(safe_read_provenance_field(
+        file.path(app_data_dir, "./dpd/provenance.yml"),
+        "retrieval",
+        "retrieved_at"
+      ), 1, 10)
     )
     dpd_last_updated(
-      safe_read_date_field(
-        file.path(app_data_dir, "./dpd/provenance.txt"),
-        "source_last_updated"
+      safe_read_provenance_field(
+        file.path(app_data_dir, "./dpd/provenance.yml"),
+        "source",
+        "last_updated"
       )
     )
   }

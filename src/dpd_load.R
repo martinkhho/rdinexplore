@@ -13,18 +13,20 @@
 .dpd_download <- function(data_dir) {
     dpd_base_url <- "https://www.canada.ca/content/dam/hc-sc/documents/services/drug-product-database/"
     dpd_extract_url <- "https://www.canada.ca/en/health-canada/services/drugs-health-products/drug-products/drug-product-database/what-data-extract-drug-product-database.html"
+    archive_names <- c("allfiles.zip", "allfiles_ia.zip", "allfiles_ap.zip", "allfiles_dr.zip")
     
     if (!dir.exists(data_dir)) {
         dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
     }
     
     # Download
-    for (f in c("allfiles.zip", "allfiles_ia.zip", "allfiles_ap.zip", "allfiles_dr.zip")) {
+    for (f in archive_names) {
         destfile <- file.path(data_dir, f)
         url <- paste0(dpd_base_url, f)
         utils::download.file(url, destfile, quiet = TRUE)
         utils::unzip(destfile, exdir = data_dir)
     }
+    retrieved_at <- Sys.time()
     
     # Scrape last updated date from DPD webpage
     last_updated <- dpd_extract_url %>%
@@ -37,13 +39,32 @@
       as.Date() %>%
       min(na.rm = TRUE)
     
-    # Save download date and last updated date to the same directory
-    writeLines(
-      c("source_name: HC Drug Product Database Digital Asset Management",
-        paste("source_url:", dpd_extract_url),
-        paste("source_last_updated:", last_updated),
-        paste("downloaded_on:", Sys.Date())),
-      file.path(data_dir, "provenance.txt")
+    # Save source and artifact metadata beside the downloaded data
+    artifacts <- lapply(archive_names, function(name) {
+      path <- file.path(data_dir, name)
+      list(
+        name = name,
+        url = paste0(dpd_base_url, name),
+        sha256 = digest::digest(path, algo = "sha256", file = TRUE)
+      )
+    })
+    write_provenance(
+      list(
+        dataset = "dpd",
+        source = list(
+          name = "Health Canada Drug Product Database",
+          url = dpd_extract_url,
+          last_updated = as.character(last_updated),
+          last_updated_precision = "day",
+          last_updated_method = "Minimum YYYY-MM-DD date found in the first table on the source page"
+        ),
+        retrieval = list(
+          retrieved_at = format(retrieved_at, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+          timestamp_precision = "second",
+          artifacts = artifacts
+        )
+      ),
+      file.path(data_dir, "provenance.yml")
     )
 }
 

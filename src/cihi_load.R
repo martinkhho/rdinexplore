@@ -11,7 +11,9 @@
   }
   
   # Download
-  httr::GET(cihi_base_url, httr::write_disk(destfile, overwrite = TRUE))
+  response <- httr::GET(cihi_base_url, httr::write_disk(destfile, overwrite = TRUE))
+  httr::stop_for_status(response)
+  retrieved_at <- Sys.time()
   
   # Extract last updated date from cover page
   cover_page <- readxl::read_excel(destfile, sheet = 1, col_names = FALSE)
@@ -26,13 +28,30 @@
     min() %>%
     format("%Y-%m")
   
-  # Save download date and last updated date to the same directory
-  writeLines(
-    c("source_name: CIHI Formulary Coverage in the Pharmaceutical Data Tool",
-      paste("source_url:", cihi_base_url),
-      paste("source_last_updated:", last_updated),
-      paste("downloaded_on:", Sys.Date())),
-    file.path(data_dir, "provenance.txt")
+  # Save source and artifact metadata beside the downloaded data
+  write_provenance(
+    list(
+      dataset = "cihi",
+      source = list(
+        name = "CIHI Formulary Coverage in the Pharmaceutical Data Tool",
+        url = cihi_base_url,
+        last_updated = as.character(last_updated),
+        last_updated_precision = "month",
+        last_updated_method = "Month and year reported on the workbook cover sheet"
+      ),
+      retrieval = list(
+        retrieved_at = format(retrieved_at, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+        timestamp_precision = "second",
+        artifacts = list(
+          list(
+            name = basename(destfile),
+            url = cihi_base_url,
+            sha256 = digest::digest(destfile, algo = "sha256", file = TRUE)
+          )
+        )
+      )
+    ),
+    file.path(data_dir, "provenance.yml")
   )
 }
 
@@ -48,9 +67,9 @@ cihi_load <- function(data_dir = "data/", download = TRUE) {
   data <- readxl::read_excel(destfile, sheet = 2, skip = 1) %>%
     dplyr::slice(-dplyr::n())
   
-  provenance_path <- file.path(data_dir, "provenance.txt")
+  provenance_path <- file.path(data_dir, "provenance.yml")
   last_updated <- tryCatch(
-    read_date_field(provenance_path, "source_last_updated"),
+    read_provenance_field(provenance_path, "source", "last_updated"),
     error = function(e) NA_character_
   )
   
