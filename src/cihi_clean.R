@@ -26,7 +26,7 @@ cihi_extract <- function(cihi, selected_benefit, selected_formulary, atc) {
   }
   
   data <- cihi$data %>%
-    dplyr::mutate(formulary = paste0(Jurisdiction, "::: ", `Drug program`)) %>%
+    dplyr::mutate(formulary = paste0(Jurisdiction, ":::", `Drug program`)) %>%
     
     # Filter
     dplyr::filter(
@@ -41,7 +41,7 @@ cihi_extract <- function(cihi, selected_benefit, selected_formulary, atc) {
       dplyr::across(where(is.character), ~ na_if(., "n/a")),
       api = dplyr::if_else(
         !is.na(`Active ingredients`),
-        stringr::str_replace_all(stringr::str_to_upper(`Active ingredients`), ",", " !"),
+        stringr::str_replace_all(stringr::str_to_upper(`Active ingredients`), ",", " ! "),
         stringr::str_to_upper(`ATC5 description`)
       ),
       flag_pdin = dplyr::if_else(`PDIN flag` == "Y", 1, 0),

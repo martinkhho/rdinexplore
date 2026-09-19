@@ -1960,7 +1960,7 @@ server <- function(input, output, session) {
         if (length(idx) == 0) {
           return(character(0))
         }
-        paste0(node$jurisdiction, "::: ", node$programs$program[idx])
+        paste0(node$jurisdiction, ":::", node$programs$program[idx])
       }), use.names = FALSE)
       selected_public_programs <<- unlist(lapply(cihi_nodes, function(node) {
         idx <- which(node$programs$child_id %in% selected_child_ids)
