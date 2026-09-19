@@ -5,11 +5,10 @@
 .DS_Store
 analysis/
 data/cihi/*
-!data/cihi/provenance.txt
+!data/cihi/provenance.yml
 data/dpd/*
-!data/dpd/provenance.txt
+!data/dpd/provenance.yml
 data/input_din_list.csv
 data/dictionary_who_atc.csv
 log/
 output/
-tests/

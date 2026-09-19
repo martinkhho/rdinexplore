@@ -36,7 +36,7 @@ High-level flow:
 Note for ICES researchers:
 - `rdinexplore.R` should not be used alone. Instead, it complements the `%dinexplore` SAS macro. `%dinexplore` often includes too many irrelevant DINs which requires substantial manual effort to clean. `rdinexplore.R` complements that by often including too few DINs - but every DIN it includes is likely correct.
 - To ensure a good balance between being including too many or too few DINs, it is recommended to select the following options:
-  - (Page 4) Select "Search publicly covered drugs" $\rightarrow$ select "Ontario Drug Benefit Program"
+  - (Page 4) Select "Search publicly covered drugs" → select "Ontario Drug Benefit Program"
   - (Page 5) Questions 1-3: do not make any restrictions.
   - (Page 5) Question 4: select both PseudoDINs and Unmapped DINs
 
@@ -94,7 +94,7 @@ Each app writes to its own log file prefix:
 
 ## License
 
-This repository uses a dual-license approach:
+This repository uses separate licenses by material type:
 
 - Code (`.R` files and other software/source code): **PolyForm Noncommercial License 1.0.0**
   - See `LICENSE-POLYFORM-NONCOMMERCIAL-1.0.0.txt`
