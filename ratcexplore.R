@@ -249,6 +249,13 @@ server <- function(input, output, session) {
   direct_children_map <- list()
   descendants_map <- list()
   atc_observers_bound <- reactiveVal(FALSE)
+  atc_observers <- list()
+  reset_atc_observers <- function() {
+    for (observer in atc_observers) observer$destroy()
+    atc_observers <<- list()
+    atc_observers_bound(FALSE)
+    skip_cascade_deselect_ids(character(0))
+  }
   nested_atc_ui_cache <- reactiveVal(NULL)
   atc_data_revision <- reactiveVal(0L)
 
@@ -480,6 +487,7 @@ server <- function(input, output, session) {
 
   rebuild_atc_structures <- function(df_atc, save_cache = TRUE) {
     hierarchy <- atc_build_hierarchy(df_atc)
+    reset_atc_observers()
 
     dict_who_atc <<- hierarchy$dictionary
     dict_who_atc1 <<- hierarchy$by_level$atc1
@@ -518,6 +526,7 @@ server <- function(input, output, session) {
       return(FALSE)
     }
 
+    reset_atc_observers()
     dict_who_atc <<- cache_obj$dict_who_atc
     dict_who_atc1 <<- cache_obj$dict_who_atc1
     dict_who_atc2 <<- cache_obj$dict_who_atc2
@@ -600,7 +609,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
 
-    lapply(non_leaf_codes, function(code) {
+    parent_observers <- lapply(non_leaf_codes, function(code) {
       observeEvent(input[[paste0("atc_", code)]], {
         input_id <- paste0("atc_", code)
         value <- input[[input_id]]
@@ -634,7 +643,7 @@ server <- function(input, output, session) {
       }, ignoreInit = TRUE)
     })
 
-    lapply(atc4_codes, function(code) {
+    leaf_observers <- lapply(atc4_codes, function(code) {
       observeEvent(input[[paste0("atc_", code)]], {
         input_id <- paste0("atc_", code)
         value <- input[[input_id]]
@@ -655,12 +664,13 @@ server <- function(input, output, session) {
       }, ignoreInit = TRUE)
     })
 
-    lapply(non_leaf_codes, function(code) {
+    toggle_observers <- lapply(non_leaf_codes, function(code) {
       observeEvent(input[[paste0("toggle_", code)]], {
         toggle(id = paste0("child_", code))
       }, ignoreInit = TRUE)
     })
 
+    atc_observers <<- c(parent_observers, leaf_observers, toggle_observers)
     atc_observers_bound(TRUE)
     NULL
   }
