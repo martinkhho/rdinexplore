@@ -1,0 +1,14 @@
+dataset: cihi
+source:
+  name: CIHI Formulary Coverage in the Pharmaceutical Data Tool
+  url: https://www.cihi.ca/sites/default/files/document/formulary-coverage-data-tool-data-table-en.xlsx
+  last_updated: '2026-05'
+  last_updated_precision: month
+  last_updated_method: Month and year reported on the workbook cover sheet
+retrieval:
+  retrieved_at: '2026-06-10'
+  timestamp_precision: day
+  artifacts:
+  - name: formulary_coverage_data.xlsx
+    url: https://www.cihi.ca/sites/default/files/document/formulary-coverage-data-tool-data-table-en.xlsx
+    sha256: 6b64db11445335e371667a5b8c42de1c57f575516a500f4459376182cb2eb1f8

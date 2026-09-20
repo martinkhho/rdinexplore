@@ -15,6 +15,7 @@ source(here("./src/cihi_load.R"))
 source(here("./src/dpd_clean.R"))
 source(here("./src/cihi_clean.R"))
 source(here("./src/merged_clean.R"))
+source(here("./src/atc_explore.R"))
 
 DATA_DIR <- here("./data/")
 dict_dpd_atc <- read_csv(file.path(DATA_DIR, "dictionary_dpd_atc.csv"), show_col_types = FALSE)
@@ -241,6 +242,8 @@ server <- function(input, output, session) {
   user_atc <- reactiveVal(character(0))
   cihi_atc_y_candidates <- reactiveVal(tibble::tibble())
   page6_cihi_y_selected_ids <- reactiveVal(character(0))
+  uploaded_din_data <- reactiveVal(tibble::tibble(din = character(0)))
+  run_merged <- reactiveVal(tibble::tibble())
   dpd_obj <- reactiveVal(NULL)
   cihi_obj <- reactiveVal(NULL)
   cihi_ui_revision <- reactiveVal(0L)
@@ -303,53 +306,55 @@ server <- function(input, output, session) {
     )
   }
   
-  safe_read_date_field <- function(path, field) {
+  safe_read_provenance_field <- function(path, section, field) {
     tryCatch(
-      read_date_field(path, field),
+      read_provenance_field(path, section, field),
       error = function(e) NA
     )
   }
   
   refresh_provenance_dates <- function() {
     dpd_last_downloaded(
-      safe_read_date_field(
-        file.path(app_data_dir, "./dpd/provenance.txt"),
-        "downloaded_on"
-      )
+      substr(safe_read_provenance_field(
+        file.path(app_data_dir, "./dpd/provenance.yml"),
+        "retrieval",
+        "retrieved_at"
+      ), 1, 10)
     )
     dpd_last_updated(
-      safe_read_date_field(
-        file.path(app_data_dir, "./dpd/provenance.txt"),
-        "source_last_updated"
+      safe_read_provenance_field(
+        file.path(app_data_dir, "./dpd/provenance.yml"),
+        "source",
+        "last_updated"
       )
     )
     cihi_last_downloaded(
-      safe_read_date_field(
-        file.path(app_data_dir, "./cihi/provenance.txt"),
-        "downloaded_on"
-      )
+      substr(safe_read_provenance_field(
+        file.path(app_data_dir, "./cihi/provenance.yml"),
+        "retrieval",
+        "retrieved_at"
+      ), 1, 10)
     )
     cihi_last_updated(
-      safe_read_date_field(
-        file.path(app_data_dir, "./cihi/provenance.txt"),
-        "source_last_updated"
+      safe_read_provenance_field(
+        file.path(app_data_dir, "./cihi/provenance.yml"),
+        "source",
+        "last_updated"
       )
     )
     
-    assign("dpd_last_downloaded", dpd_last_downloaded(), envir = .GlobalEnv)
-    assign("dpd_last_updated", dpd_last_updated(), envir = .GlobalEnv)
-    assign("cihi_last_downloaded", cihi_last_downloaded(), envir = .GlobalEnv)
-    assign("cihi_last_updated", cihi_last_updated(), envir = .GlobalEnv)
   }
   
   refresh_page5_last_updated <- function() {
-    dpd_val <- safe_read_date_field(
-      file.path(app_data_dir, "./dpd/provenance.txt"),
-      "source_last_updated"
+    dpd_val <- safe_read_provenance_field(
+      file.path(app_data_dir, "./dpd/provenance.yml"),
+      "source",
+      "last_updated"
     )
-    cihi_val <- safe_read_date_field(
-      file.path(app_data_dir, "./cihi/provenance.txt"),
-      "source_last_updated"
+    cihi_val <- safe_read_provenance_field(
+      file.path(app_data_dir, "./cihi/provenance.yml"),
+      "source",
+      "last_updated"
     )
     
     page5_dpd_last_updated(dpd_val)
@@ -364,17 +369,24 @@ server <- function(input, output, session) {
     }
     cihi_last_updated_d <<- cihi_date
     
-    assign("dpd_last_updated_d", dpd_last_updated_d, envir = .GlobalEnv)
-    assign("cihi_last_updated_d", cihi_last_updated_d, envir = .GlobalEnv)
   }
   
+  dict_cihi_formularies <- tibble::tibble(Jurisdiction = character(0), `Drug program` = character(0))
   cihi_nodes <- list()
   cihi_parent_ids <- character(0)
   cihi_child_ids <- character(0)
   cihi_all_checkbox_ids <- character(0)
   cihi_observers_bound <- reactiveVal(FALSE)
+  cihi_observers <- list()
+  reset_cihi_observers <- function() {
+    for (observer in cihi_observers) observer$destroy()
+    cihi_observers <<- list()
+    cihi_observers_bound(FALSE)
+    skip_cihi_parent_deselect_ids(character(0))
+  }
   
   rebuild_cihi_formulary_structures <- function(df_formularies) {
+    reset_cihi_observers()
     if (is.null(df_formularies) || nrow(df_formularies) == 0) {
       dict_cihi_formularies <<- tibble::tibble(
         Jurisdiction = character(0),
@@ -386,7 +398,6 @@ server <- function(input, output, session) {
       cihi_all_checkbox_ids <<- character(0)
       cihi_observers_bound(FALSE)
       cihi_ui_revision(cihi_ui_revision() + 1L)
-      assign("dict_cihi_formularies", dict_cihi_formularies, envir = .GlobalEnv)
       return(NULL)
     }
     
@@ -440,17 +451,11 @@ server <- function(input, output, session) {
     cihi_all_checkbox_ids <<- c(cihi_parent_ids, cihi_child_ids)
     cihi_observers_bound(FALSE)
     cihi_ui_revision(cihi_ui_revision() + 1L)
-    assign("dict_cihi_formularies", dict_cihi_formularies, envir = .GlobalEnv)
     NULL
   }
   
-  cihi_benefit_values <- if (exists("dict_cihi_benefits", inherits = TRUE)) {
-    vals <- unique(as.character(get("dict_cihi_benefits", inherits = TRUE)))
-    vals <- trimws(vals)
-    vals[nzchar(vals)]
-  } else {
-    character(0)
-  }
+  # Populate from this session's CIHI dataset when it is loaded.
+  cihi_benefit_values <- character(0)
   
   selected_benefit <- character(0)
   selected_formulary <- character(0)
@@ -485,7 +490,15 @@ server <- function(input, output, session) {
   direct_children_map <- list()
   descendants_map <- list()
   atc_observers_bound <- reactiveVal(FALSE)
+  atc_observers <- list()
+  reset_atc_observers <- function() {
+    for (observer in atc_observers) observer$destroy()
+    atc_observers <<- list()
+    atc_observers_bound(FALSE)
+    skip_cascade_deselect_ids(character(0))
+  }
   nested_atc_ui_cache <- reactiveVal(NULL)
+  atc_data_revision <- reactiveVal(0L)
   
   # Full 4-level nested ATC UI
   build_nested_atc_ui <- function() {
@@ -714,73 +727,28 @@ server <- function(input, output, session) {
   }
   
   rebuild_atc_structures <- function(df_atc, save_cache = TRUE) {
-    df_atc <- df_atc[, c("atc_code", "atc_name"), drop = FALSE]
-    df_atc$atc_code <- as.character(df_atc$atc_code)
-    df_atc$atc_name <- as.character(df_atc$atc_name)
-    df_atc <- df_atc %>%
-      dplyr::mutate(
-        atc_code = stringr::str_to_upper(trimws(atc_code)),
-        atc_name = trimws(atc_name)
-      ) %>%
-      dplyr::filter(!is.na(atc_code), nzchar(atc_code)) %>%
-      dplyr::group_by(atc_code) %>%
-      dplyr::summarise(
-        atc_name = {
-          name_vals <- atc_name[!is.na(atc_name) & nzchar(atc_name)]
-          if (length(name_vals) == 0) NA_character_ else name_vals[[1]]
-        },
-        .groups = "drop"
-      )
+    hierarchy <- atc_build_hierarchy(df_atc)
+    reset_atc_observers()
+
+    dict_who_atc <<- hierarchy$dictionary
+    dict_who_atc1 <<- hierarchy$by_level$atc1
+    dict_who_atc2 <<- hierarchy$by_level$atc2
+    dict_who_atc3 <<- hierarchy$by_level$atc3
+    dict_who_atc4 <<- hierarchy$by_level$atc4
+
+    atc1_codes <<- hierarchy$codes$atc1
+    atc2_codes <<- hierarchy$codes$atc2
+    atc3_codes <<- hierarchy$codes$atc3
+    atc4_codes <<- hierarchy$codes$atc4
+    non_leaf_codes <<- hierarchy$non_leaf_codes
+    all_atc_codes <<- hierarchy$all_codes
+    all_atc_ids <<- hierarchy$all_ids
+    direct_children_map <<- hierarchy$direct_children
+    descendants_map <<- hierarchy$descendants
     
-    dict_who_atc <<- df_atc
-    dict_who_atc1 <<- filter(dict_who_atc, nchar(atc_code) == 1)
-    dict_who_atc2 <<- filter(dict_who_atc, nchar(atc_code) == 3)
-    dict_who_atc3 <<- filter(dict_who_atc, nchar(atc_code) == 4)
-    dict_who_atc4 <<- filter(dict_who_atc, nchar(atc_code) == 5)
-    
-    atc1_codes <<- dict_who_atc1$atc_code
-    atc2_codes <<- dict_who_atc2$atc_code
-    atc3_codes <<- dict_who_atc3$atc_code
-    atc4_codes <<- dict_who_atc4$atc_code
-    non_leaf_codes <<- c(atc1_codes, atc2_codes, atc3_codes)
-    all_atc_codes <<- c(non_leaf_codes, atc4_codes)
-    all_atc_ids <<- paste0("atc_", all_atc_codes)
-    
-    direct_children_map_local <- setNames(
-      vector("list", length(non_leaf_codes)),
-      non_leaf_codes
-    )
-    for (code in atc1_codes) {
-      direct_children_map_local[[code]] <- atc2_codes[startsWith(atc2_codes, code)]
-    }
-    for (code in atc2_codes) {
-      direct_children_map_local[[code]] <- atc3_codes[startsWith(atc3_codes, code)]
-    }
-    for (code in atc3_codes) {
-      direct_children_map_local[[code]] <- atc4_codes[startsWith(atc4_codes, code)]
-    }
-    direct_children_map <<- direct_children_map_local
-    
-    descendants_map_local <- setNames(
-      vector("list", length(all_atc_codes)),
-      all_atc_codes
-    )
-    for (code in all_atc_codes) {
-      descendants_map_local[[code]] <- c(
-        atc2_codes[startsWith(atc2_codes, code)],
-        atc3_codes[startsWith(atc3_codes, code)],
-        atc4_codes[startsWith(atc4_codes, code)]
-      )
-    }
-    descendants_map <<- descendants_map_local
-    
-    assign("dict_who_atc", dict_who_atc, envir = .GlobalEnv)
-    assign("dict_who_atc1", dict_who_atc1, envir = .GlobalEnv)
-    assign("dict_who_atc2", dict_who_atc2, envir = .GlobalEnv)
-    assign("dict_who_atc3", dict_who_atc3, envir = .GlobalEnv)
-    assign("dict_who_atc4", dict_who_atc4, envir = .GlobalEnv)
     
     nested_atc_ui_cache(build_nested_atc_ui())
+    atc_data_revision(isolate(atc_data_revision()) + 1L)
     if (isTRUE(save_cache) && !isTRUE(save_atc_checklist_cache())) {
       log_event("WARN", "atc_checklist_cache_save_failed")
     }
@@ -799,6 +767,7 @@ server <- function(input, output, session) {
       return(FALSE)
     }
     
+    reset_atc_observers()
     dict_who_atc <<- cache_obj$dict_who_atc
     dict_who_atc1 <<- cache_obj$dict_who_atc1
     dict_who_atc2 <<- cache_obj$dict_who_atc2
@@ -814,12 +783,8 @@ server <- function(input, output, session) {
     direct_children_map <<- cache_obj$direct_children_map
     descendants_map <<- cache_obj$descendants_map
     nested_atc_ui_cache(neutralize_cached_nested_atc_ui(cache_obj$nested_atc_ui))
-    assign("dict_who_atc", dict_who_atc, envir = .GlobalEnv)
-    assign("dict_who_atc1", dict_who_atc1, envir = .GlobalEnv)
-    assign("dict_who_atc2", dict_who_atc2, envir = .GlobalEnv)
-    assign("dict_who_atc3", dict_who_atc3, envir = .GlobalEnv)
-    assign("dict_who_atc4", dict_who_atc4, envir = .GlobalEnv)
     atc_observers_bound(FALSE)
+    atc_data_revision(isolate(atc_data_revision()) + 1L)
     TRUE
   }
   
@@ -885,7 +850,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    lapply(non_leaf_codes, function(code) {
+    parent_observers <- lapply(non_leaf_codes, function(code) {
       observeEvent(input[[paste0("atc_", code)]], {
         input_id <- paste0("atc_", code)
         value <- input[[input_id]]
@@ -919,7 +884,7 @@ server <- function(input, output, session) {
       }, ignoreInit = TRUE)
     })
     
-    lapply(atc4_codes, function(code) {
+    leaf_observers <- lapply(atc4_codes, function(code) {
       observeEvent(input[[paste0("atc_", code)]], {
         input_id <- paste0("atc_", code)
         value <- input[[input_id]]
@@ -940,12 +905,13 @@ server <- function(input, output, session) {
       }, ignoreInit = TRUE)
     })
     
-    lapply(non_leaf_codes, function(code) {
+    toggle_observers <- lapply(non_leaf_codes, function(code) {
       observeEvent(input[[paste0("toggle_", code)]], {
         shinyjs::toggle(id = paste0("child_", code))
       }, ignoreInit = TRUE)
     })
     
+    atc_observers <<- c(parent_observers, leaf_observers, toggle_observers)
     atc_observers_bound(TRUE)
     NULL
   }
@@ -1088,7 +1054,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    lapply(cihi_nodes, function(node) {
+    parent_observers <- lapply(cihi_nodes, function(node) {
       observeEvent(input[[node$parent_id]], {
         value <- input[[node$parent_id]]
         
@@ -1105,7 +1071,7 @@ server <- function(input, output, session) {
       }, ignoreInit = TRUE)
     })
     
-    lapply(cihi_nodes, function(node) {
+    child_observers <- lapply(cihi_nodes, function(node) {
       lapply(node$programs$child_id, function(child_id) {
         observeEvent(input[[child_id]], {
           value <- input[[child_id]]
@@ -1126,12 +1092,17 @@ server <- function(input, output, session) {
       })
     })
     
-    lapply(cihi_nodes, function(node) {
+    toggle_observers <- lapply(cihi_nodes, function(node) {
       observeEvent(input[[node$toggle_id]], {
         shinyjs::toggle(id = node$child_wrap_id)
       }, ignoreInit = TRUE)
     })
     
+    cihi_observers <<- c(
+      parent_observers,
+      unlist(child_observers, recursive = FALSE, use.names = FALSE),
+      toggle_observers
+    )
     cihi_observers_bound(TRUE)
     NULL
   }
@@ -1350,7 +1321,7 @@ server <- function(input, output, session) {
           
           # Save validated file
           write_csv(df, here("data", "input_din_list.csv"))
-          assign("initial_dins", df, envir = .GlobalEnv)
+          uploaded_din_data(df)
           
           uploaded_file(TRUE)
           page1_status_message(paste0(
@@ -1358,12 +1329,12 @@ server <- function(input, output, session) {
             " (saved to ./data/input_din_list.csv)."
           ))
         } else {
+          uploaded_din_data(tibble::tibble(din = character(0)))
           uploaded_file(FALSE)
           page1_status_message(NULL)
         }
         
         input_din_list(use_din_upload)
-        assign("input_din_list", isTRUE(use_din_upload), envir = .GlobalEnv)
         
         dpd <- dpd_obj()
         cihi <- cihi_obj()
@@ -1399,11 +1370,6 @@ server <- function(input, output, session) {
           similar_atc(similar_atc_vals)
           user_atc(user_atc_vals)
           
-          assign("matched_dins", matched_dins_vals, envir = .GlobalEnv)
-          assign("unmatched_dins", unmatched_dins_vals, envir = .GlobalEnv)
-          assign("matched_atc", matched_atc_vals, envir = .GlobalEnv)
-          assign("similar_atc", similar_atc_vals, envir = .GlobalEnv)
-          assign("user_atc", user_atc_vals, envir = .GlobalEnv)
         } else {
           user_atc_vals <- c(
             pull(dict_who_atc1, atc_code),
@@ -1416,7 +1382,6 @@ server <- function(input, output, session) {
           matched_atc(character(0))
           similar_atc(character(0))
           user_atc(user_atc_vals)
-          assign("user_atc", user_atc_vals, envir = .GlobalEnv)
         }
         
         incProgress(1, detail = "Done")
@@ -1581,8 +1546,6 @@ server <- function(input, output, session) {
         download_dpd <- identical(dpd_choice(), "download")
         download_cihi <- identical(cihi_choice(), "download")
         
-        assign("download_dpd", download_dpd, envir = .GlobalEnv)
-        assign("download_cihi", download_cihi, envir = .GlobalEnv)
         
         dpd_dir <- file.path(app_data_dir, "dpd")
         cihi_dir <- file.path(app_data_dir, "cihi")
@@ -1666,8 +1629,6 @@ server <- function(input, output, session) {
         
         dpd_obj(dpd)
         cihi_obj(cihi)
-        assign("dpd", dpd, envir = .GlobalEnv)
-        assign("cihi", cihi, envir = .GlobalEnv)
         
         if (isTRUE(download_dpd) || isTRUE(download_cihi)) {
           refresh_provenance_dates()
@@ -1681,7 +1642,6 @@ server <- function(input, output, session) {
         
         dict_cihi_benefits <- sort(unique(cihi$data$`Benefit status`))
         cihi_benefit_values <<- dict_cihi_benefits
-        assign("dict_cihi_benefits", dict_cihi_benefits, envir = .GlobalEnv)
         
         cihi_page4_saved_selected_ids(character(0))
         
@@ -1714,6 +1674,7 @@ server <- function(input, output, session) {
   
   # Enable Continue only if >=1 ATC selected
   atc_selected_flags <- reactive({
+    atc_data_revision()
     vapply(all_atc_ids, function(id) isTRUE(input[[id]]), logical(1))
   })
   
@@ -1786,7 +1747,6 @@ server <- function(input, output, session) {
     atc_saved_selected_ids(selected_ids)
     selected_codes <- unique(gsub("^atc_", "", selected_ids))
     user_atc(selected_codes)
-    assign("user_atc", selected_codes, envir = .GlobalEnv)
     current_page("4_search")
   })
   
@@ -1980,7 +1940,6 @@ server <- function(input, output, session) {
         )
     )
     
-    assign("search_all", isTRUE(search_all()), envir = .GlobalEnv)
     
     if (identical(search_all(), FALSE)) {
       selected_child_ids <- get_selected_ids(cihi_child_ids)
@@ -1995,7 +1954,7 @@ server <- function(input, output, session) {
         if (length(idx) == 0) {
           return(character(0))
         }
-        paste0(node$jurisdiction, "::: ", node$programs$program[idx])
+        paste0(node$jurisdiction, ":::", node$programs$program[idx])
       }), use.names = FALSE)
       selected_public_programs <<- unlist(lapply(cihi_nodes, function(node) {
         idx <- which(node$programs$child_id %in% selected_child_ids)
@@ -2010,9 +1969,6 @@ server <- function(input, output, session) {
       selected_public_programs <<- character(0)
     }
     
-    assign("selected_benefit", selected_benefit, envir = .GlobalEnv)
-    assign("selected_formulary", selected_formulary, envir = .GlobalEnv)
-    assign("selected_public_programs", selected_public_programs, envir = .GlobalEnv)
     
     cihi_page4_saved_selected_ids(get_selected_ids(cihi_child_ids))
     current_page("5_filters")
@@ -2217,16 +2173,6 @@ server <- function(input, output, session) {
           study_end <<- end_date
         }
         
-        assign("filter_time", filter_time, envir = .GlobalEnv)
-        assign("study_start", study_start, envir = .GlobalEnv)
-        assign("study_end", study_end, envir = .GlobalEnv)
-        assign("filter_therapeutic", filter_therapeutic, envir = .GlobalEnv)
-        assign("filter_rx", filter_rx, envir = .GlobalEnv)
-        assign("add_pdin", add_pdin, envir = .GlobalEnv)
-        assign("add_unmapped", add_unmapped, envir = .GlobalEnv)
-        assign("add_route", add_route, envir = .GlobalEnv)
-        assign("add_schedule", add_schedule, envir = .GlobalEnv)
-        assign("add_biosimilar", add_biosimilar, envir = .GlobalEnv)
         
         dpd <- dpd_obj()
         cihi <- cihi_obj()
@@ -2241,12 +2187,8 @@ server <- function(input, output, session) {
         } else {
           user_atc()
         }
-        uploaded_dins_vals <- character(0)
-        if (exists("initial_dins", inherits = TRUE)) {
-          uploaded_dins_vals <- as.character(get("initial_dins", inherits = TRUE)$din)
-          uploaded_dins_vals <- trimws(uploaded_dins_vals)
-          uploaded_dins_vals <- unique(uploaded_dins_vals[nzchar(uploaded_dins_vals)])
-        }
+        uploaded_dins_vals <- trimws(as.character(uploaded_din_data()$din))
+        uploaded_dins_vals <- unique(uploaded_dins_vals[!is.na(uploaded_dins_vals) & nzchar(uploaded_dins_vals)])
         input_din_list_val <- isTRUE(input_din_list())
         search_all_val <- isTRUE(search_all())
         
@@ -2358,21 +2300,7 @@ server <- function(input, output, session) {
         cihi_atc_y_merged <- apply_optional_features(cihi_atc_y_merged)
         cihi_atc_y_candidates(cihi_atc_y_merged)
         
-        assign("dpd_flat", dpd_flat, envir = .GlobalEnv)
-        assign("dpd_flat_for_y", dpd_flat_for_y, envir = .GlobalEnv)
-        assign("dpd_dins", dpd_dins, envir = .GlobalEnv)
-        assign("dpd_dins_for_y", dpd_dins_for_y, envir = .GlobalEnv)
-        assign("dpd_dins_excluded", dpd_dins_excluded, envir = .GlobalEnv)
-        assign("dpd_dins_excluded_for_y", dpd_dins_excluded_for_y, envir = .GlobalEnv)
-        assign("cihi_flat", cihi_flat_non_y, envir = .GlobalEnv)
-        assign("cihi_flat_y", cihi_flat_y, envir = .GlobalEnv)
-        assign("cihi_dins", cihi_dins, envir = .GlobalEnv)
-        assign("cihi_dins_non_y", cihi_dins_non_y, envir = .GlobalEnv)
-        assign("cihi_dins_excluded", cihi_dins_excluded, envir = .GlobalEnv)
-        assign("dpd_cihi", dpd_cihi, envir = .GlobalEnv)
-        assign("cihi_dpd", cihi_dpd, envir = .GlobalEnv)
-        assign("cihi_atc_y_candidates", cihi_atc_y_merged, envir = .GlobalEnv)
-        assign("merged", merged, envir = .GlobalEnv)
+        run_merged(merged)
         
         write_run_outputs(merged)
         
@@ -2408,6 +2336,8 @@ server <- function(input, output, session) {
   })
   
   reset_for_new_datasets <- function() {
+    uploaded_din_data(tibble::tibble(din = character(0)))
+    run_merged(tibble::tibble())
     dpd_choice(NULL)
     cihi_choice(NULL)
     search_all(NULL)
@@ -2432,10 +2362,6 @@ server <- function(input, output, session) {
     selected_formulary <<- character(0)
     selected_public_programs <<- character(0)
     
-    assign("input_din_list", FALSE, envir = .GlobalEnv)
-    assign("selected_benefit", selected_benefit, envir = .GlobalEnv)
-    assign("selected_formulary", selected_formulary, envir = .GlobalEnv)
-    assign("selected_public_programs", selected_public_programs, envir = .GlobalEnv)
   }
   
   observeEvent(input$page6_reuse_datasets_btn, {
@@ -2521,11 +2447,7 @@ server <- function(input, output, session) {
       "Not uploaded"
     }
     
-    n_uploaded_dins <- if (exists("initial_dins", inherits = TRUE)) {
-      nrow(get("initial_dins", inherits = TRUE))
-    } else {
-      0L
-    }
+    n_uploaded_dins <- nrow(uploaded_din_data())
     n_matched_dins <- length(unique(as.character(matched_dins())))
     
     search_scope_label <- if (isTRUE(search_all())) {
@@ -2699,7 +2621,6 @@ server <- function(input, output, session) {
         )
       }
       
-      assign("run_output_dir", run_output_dir, envir = .GlobalEnv)
       log_event(
         "INFO",
         "run_outputs_written",
@@ -3054,11 +2975,7 @@ server <- function(input, output, session) {
   })
   
   page6_final_merged_df <- reactive({
-    base_df <- if (exists("merged", inherits = TRUE)) {
-      get("merged", inherits = TRUE)
-    } else {
-      tibble::tibble()
-    }
+    base_df <- run_merged()
     y_selected_df <- page6_selected_cihi_atc_y_rows()
     if (nrow(y_selected_df) == 0) {
       return(base_df)

@@ -226,24 +226,26 @@ server <- function(input, output, session) {
     x_chr
   }
 
-  safe_read_date_field <- function(path, field) {
+  safe_read_provenance_field <- function(path, section, field) {
     tryCatch(
-      read_date_field(path, field),
+      read_provenance_field(path, section, field),
       error = function(e) NA
     )
   }
 
   refresh_provenance_dates <- function() {
     dpd_last_downloaded(
-      safe_read_date_field(
-        file.path(app_data_dir, "./dpd/provenance.txt"),
-        "downloaded_on"
-      )
+      substr(safe_read_provenance_field(
+        file.path(app_data_dir, "./dpd/provenance.yml"),
+        "retrieval",
+        "retrieved_at"
+      ), 1, 10)
     )
     dpd_last_updated(
-      safe_read_date_field(
-        file.path(app_data_dir, "./dpd/provenance.txt"),
-        "source_last_updated"
+      safe_read_provenance_field(
+        file.path(app_data_dir, "./dpd/provenance.yml"),
+        "source",
+        "last_updated"
       )
     )
   }
@@ -354,7 +356,6 @@ server <- function(input, output, session) {
         )
       }
 
-      assign("run_output_dir", run_output_dir, envir = .GlobalEnv)
       log_event(
         "INFO",
         "run_outputs_written",
@@ -427,13 +428,13 @@ server <- function(input, output, session) {
         problem_cols <- dpd_problem_cols(merged)
         run_problem_cols(problem_cols)
         run_merged(merged)
+        refresh_provenance_dates()
         write_run_outputs(merged, problem_cols)
         log_event("INFO", "run_complete", list(merged_rows = nrow(merged), merged_cols = ncol(merged)))
 
         incProgress(1, detail = "Done")
       })
 
-      refresh_provenance_dates()
       current_page("2_end")
     }, error = function(e) {
       msg <- conditionMessage(e)
@@ -682,7 +683,7 @@ server <- function(input, output, session) {
           ),
           tags$div(
             strong("Warning:"),
-            " Only the current status of the drug is recorded in this file (if the DPD had multiple statuses on the same day, a tiebreaker was applied that prioritized CANCELLED statuses over DORMANT, MARKETED, or APPROVED). If you wish to explore historical statuses, use the raw DPD status files in the /data folder."
+            " Only the latest status of the drug is recorded in this file (if the DPD had multiple statuses on the same day, a tiebreaker was applied that prioritized CANCELLED statuses over DORMANT, MARKETED, or APPROVED). If you wish to explore historical statuses, use the raw DPD status files in the /data folder."
           )
         ),
         downloadButton("page2_download_merged", "Download DPD (CSV)"),

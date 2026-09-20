@@ -2,15 +2,42 @@
 # Reads files
 # ------------------------------------------------------------------------------
 
-# Reads date in provenance file
-read_date_field <- function(path, key) {
-  lines <- readLines(path, warn = FALSE)
-  matched <- lines[grepl(paste0("^", key, ":"), lines)]
-  if (length(matched) == 0) {
+# Reads and validates a dataset provenance sidecar
+read_provenance <- function(path) {
+  if (!file.exists(path)) {
+    stop("Provenance file does not exist: ", path)
+  }
+  provenance <- yaml::read_yaml(path, eval.expr = FALSE)
+  if (!is.list(provenance) ||
+      is.null(provenance$dataset) ||
+      is.null(provenance$source) ||
+      is.null(provenance$retrieval)) {
+    stop("Incomplete provenance file: ", path)
+  }
+  provenance
+}
+
+# Writes a dataset provenance sidecar
+write_provenance <- function(provenance, path) {
+  if (!is.list(provenance) ||
+      is.null(provenance$dataset) ||
+      is.null(provenance$source) ||
+      is.null(provenance$retrieval)
+    ) {
+    stop("Provenance must include dataset, source, and retrieval")
+  }
+  yaml::write_yaml(provenance, path, fileEncoding = "UTF-8")
+  invisible(path)
+}
+
+# Returns a field from a provenance sidecar
+read_provenance_field <- function(path, section, field) {
+  provenance <- read_provenance(path)
+  value <- provenance[[section]][[field]]
+  if (is.null(value) || length(value) == 0 || is.na(value[[1]])) {
     return(NA_character_)
   }
-  key_date <- sub(paste0("^", key, ":\\s*"), "", matched[[1]])
-  return(key_date)
+  as.character(value[[1]])
 }
 
 # Builds a safe prefix regex from a character vector

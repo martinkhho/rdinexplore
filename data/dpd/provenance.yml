@@ -1,0 +1,23 @@
+dataset: dpd
+source:
+  name: Health Canada Drug Product Database
+  url: https://www.canada.ca/en/health-canada/services/drugs-health-products/drug-products/drug-product-database/what-data-extract-drug-product-database.html
+  last_updated: '2026-06-01'
+  last_updated_precision: day
+  last_updated_method: Minimum YYYY-MM-DD date found in the first table on the source page
+retrieval:
+  retrieved_at: '2026-06-10'
+  timestamp_precision: day
+  artifacts:
+  - name: allfiles.zip
+    url: https://www.canada.ca/content/dam/hc-sc/documents/services/drug-product-database/allfiles.zip
+    sha256: 7067ade7c9cb3585cedb539b2d94d35ad6854ff0de85bafca413050661d669b0
+  - name: allfiles_ia.zip
+    url: https://www.canada.ca/content/dam/hc-sc/documents/services/drug-product-database/allfiles_ia.zip
+    sha256: da84dffc69bf1e8fd61e82ae835e76d019547090311c0016a4f4fed812a3f198
+  - name: allfiles_ap.zip
+    url: https://www.canada.ca/content/dam/hc-sc/documents/services/drug-product-database/allfiles_ap.zip
+    sha256: ebdaa9b532ff5deb857af220da535820447c8f24bd83d3b69215350c450862f6
+  - name: allfiles_dr.zip
+    url: https://www.canada.ca/content/dam/hc-sc/documents/services/drug-product-database/allfiles_dr.zip
+    sha256: e41cfca6b9e415a15631850a84ac0a027bf11d89b2d8609f8ea44a7643e3ff8f
