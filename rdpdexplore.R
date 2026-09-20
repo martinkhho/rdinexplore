@@ -356,7 +356,6 @@ server <- function(input, output, session) {
         )
       }
 
-      assign("run_output_dir", run_output_dir, envir = .GlobalEnv)
       log_event(
         "INFO",
         "run_outputs_written",

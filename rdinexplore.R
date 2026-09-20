@@ -343,10 +343,6 @@ server <- function(input, output, session) {
       )
     )
     
-    assign("dpd_last_downloaded", dpd_last_downloaded(), envir = .GlobalEnv)
-    assign("dpd_last_updated", dpd_last_updated(), envir = .GlobalEnv)
-    assign("cihi_last_downloaded", cihi_last_downloaded(), envir = .GlobalEnv)
-    assign("cihi_last_updated", cihi_last_updated(), envir = .GlobalEnv)
   }
   
   refresh_page5_last_updated <- function() {
@@ -373,8 +369,6 @@ server <- function(input, output, session) {
     }
     cihi_last_updated_d <<- cihi_date
     
-    assign("dpd_last_updated_d", dpd_last_updated_d, envir = .GlobalEnv)
-    assign("cihi_last_updated_d", cihi_last_updated_d, envir = .GlobalEnv)
   }
   
   dict_cihi_formularies <- tibble::tibble(Jurisdiction = character(0), `Drug program` = character(0))
@@ -460,13 +454,8 @@ server <- function(input, output, session) {
     NULL
   }
   
-  cihi_benefit_values <- if (exists("dict_cihi_benefits", inherits = TRUE)) {
-    vals <- unique(as.character(get("dict_cihi_benefits", inherits = TRUE)))
-    vals <- trimws(vals)
-    vals[nzchar(vals)]
-  } else {
-    character(0)
-  }
+  # Populate from this session's CIHI dataset when it is loaded.
+  cihi_benefit_values <- character(0)
   
   selected_benefit <- character(0)
   selected_formulary <- character(0)
@@ -757,11 +746,6 @@ server <- function(input, output, session) {
     direct_children_map <<- hierarchy$direct_children
     descendants_map <<- hierarchy$descendants
     
-    assign("dict_who_atc", dict_who_atc, envir = .GlobalEnv)
-    assign("dict_who_atc1", dict_who_atc1, envir = .GlobalEnv)
-    assign("dict_who_atc2", dict_who_atc2, envir = .GlobalEnv)
-    assign("dict_who_atc3", dict_who_atc3, envir = .GlobalEnv)
-    assign("dict_who_atc4", dict_who_atc4, envir = .GlobalEnv)
     
     nested_atc_ui_cache(build_nested_atc_ui())
     atc_data_revision(isolate(atc_data_revision()) + 1L)
@@ -799,11 +783,6 @@ server <- function(input, output, session) {
     direct_children_map <<- cache_obj$direct_children_map
     descendants_map <<- cache_obj$descendants_map
     nested_atc_ui_cache(neutralize_cached_nested_atc_ui(cache_obj$nested_atc_ui))
-    assign("dict_who_atc", dict_who_atc, envir = .GlobalEnv)
-    assign("dict_who_atc1", dict_who_atc1, envir = .GlobalEnv)
-    assign("dict_who_atc2", dict_who_atc2, envir = .GlobalEnv)
-    assign("dict_who_atc3", dict_who_atc3, envir = .GlobalEnv)
-    assign("dict_who_atc4", dict_who_atc4, envir = .GlobalEnv)
     atc_observers_bound(FALSE)
     atc_data_revision(isolate(atc_data_revision()) + 1L)
     TRUE
@@ -1343,7 +1322,6 @@ server <- function(input, output, session) {
           # Save validated file
           write_csv(df, here("data", "input_din_list.csv"))
           uploaded_din_data(df)
-          assign("initial_dins", df, envir = .GlobalEnv)
           
           uploaded_file(TRUE)
           page1_status_message(paste0(
@@ -1357,7 +1335,6 @@ server <- function(input, output, session) {
         }
         
         input_din_list(use_din_upload)
-        assign("input_din_list", isTRUE(use_din_upload), envir = .GlobalEnv)
         
         dpd <- dpd_obj()
         cihi <- cihi_obj()
@@ -1393,11 +1370,6 @@ server <- function(input, output, session) {
           similar_atc(similar_atc_vals)
           user_atc(user_atc_vals)
           
-          assign("matched_dins", matched_dins_vals, envir = .GlobalEnv)
-          assign("unmatched_dins", unmatched_dins_vals, envir = .GlobalEnv)
-          assign("matched_atc", matched_atc_vals, envir = .GlobalEnv)
-          assign("similar_atc", similar_atc_vals, envir = .GlobalEnv)
-          assign("user_atc", user_atc_vals, envir = .GlobalEnv)
         } else {
           user_atc_vals <- c(
             pull(dict_who_atc1, atc_code),
@@ -1410,7 +1382,6 @@ server <- function(input, output, session) {
           matched_atc(character(0))
           similar_atc(character(0))
           user_atc(user_atc_vals)
-          assign("user_atc", user_atc_vals, envir = .GlobalEnv)
         }
         
         incProgress(1, detail = "Done")
@@ -1575,8 +1546,6 @@ server <- function(input, output, session) {
         download_dpd <- identical(dpd_choice(), "download")
         download_cihi <- identical(cihi_choice(), "download")
         
-        assign("download_dpd", download_dpd, envir = .GlobalEnv)
-        assign("download_cihi", download_cihi, envir = .GlobalEnv)
         
         dpd_dir <- file.path(app_data_dir, "dpd")
         cihi_dir <- file.path(app_data_dir, "cihi")
@@ -1660,8 +1629,6 @@ server <- function(input, output, session) {
         
         dpd_obj(dpd)
         cihi_obj(cihi)
-        assign("dpd", dpd, envir = .GlobalEnv)
-        assign("cihi", cihi, envir = .GlobalEnv)
         
         if (isTRUE(download_dpd) || isTRUE(download_cihi)) {
           refresh_provenance_dates()
@@ -1675,7 +1642,6 @@ server <- function(input, output, session) {
         
         dict_cihi_benefits <- sort(unique(cihi$data$`Benefit status`))
         cihi_benefit_values <<- dict_cihi_benefits
-        assign("dict_cihi_benefits", dict_cihi_benefits, envir = .GlobalEnv)
         
         cihi_page4_saved_selected_ids(character(0))
         
@@ -1781,7 +1747,6 @@ server <- function(input, output, session) {
     atc_saved_selected_ids(selected_ids)
     selected_codes <- unique(gsub("^atc_", "", selected_ids))
     user_atc(selected_codes)
-    assign("user_atc", selected_codes, envir = .GlobalEnv)
     current_page("4_search")
   })
   
@@ -1975,7 +1940,6 @@ server <- function(input, output, session) {
         )
     )
     
-    assign("search_all", isTRUE(search_all()), envir = .GlobalEnv)
     
     if (identical(search_all(), FALSE)) {
       selected_child_ids <- get_selected_ids(cihi_child_ids)
@@ -2005,9 +1969,6 @@ server <- function(input, output, session) {
       selected_public_programs <<- character(0)
     }
     
-    assign("selected_benefit", selected_benefit, envir = .GlobalEnv)
-    assign("selected_formulary", selected_formulary, envir = .GlobalEnv)
-    assign("selected_public_programs", selected_public_programs, envir = .GlobalEnv)
     
     cihi_page4_saved_selected_ids(get_selected_ids(cihi_child_ids))
     current_page("5_filters")
@@ -2212,16 +2173,6 @@ server <- function(input, output, session) {
           study_end <<- end_date
         }
         
-        assign("filter_time", filter_time, envir = .GlobalEnv)
-        assign("study_start", study_start, envir = .GlobalEnv)
-        assign("study_end", study_end, envir = .GlobalEnv)
-        assign("filter_therapeutic", filter_therapeutic, envir = .GlobalEnv)
-        assign("filter_rx", filter_rx, envir = .GlobalEnv)
-        assign("add_pdin", add_pdin, envir = .GlobalEnv)
-        assign("add_unmapped", add_unmapped, envir = .GlobalEnv)
-        assign("add_route", add_route, envir = .GlobalEnv)
-        assign("add_schedule", add_schedule, envir = .GlobalEnv)
-        assign("add_biosimilar", add_biosimilar, envir = .GlobalEnv)
         
         dpd <- dpd_obj()
         cihi <- cihi_obj()
@@ -2349,22 +2300,7 @@ server <- function(input, output, session) {
         cihi_atc_y_merged <- apply_optional_features(cihi_atc_y_merged)
         cihi_atc_y_candidates(cihi_atc_y_merged)
         
-        assign("dpd_flat", dpd_flat, envir = .GlobalEnv)
-        assign("dpd_flat_for_y", dpd_flat_for_y, envir = .GlobalEnv)
-        assign("dpd_dins", dpd_dins, envir = .GlobalEnv)
-        assign("dpd_dins_for_y", dpd_dins_for_y, envir = .GlobalEnv)
-        assign("dpd_dins_excluded", dpd_dins_excluded, envir = .GlobalEnv)
-        assign("dpd_dins_excluded_for_y", dpd_dins_excluded_for_y, envir = .GlobalEnv)
-        assign("cihi_flat", cihi_flat_non_y, envir = .GlobalEnv)
-        assign("cihi_flat_y", cihi_flat_y, envir = .GlobalEnv)
-        assign("cihi_dins", cihi_dins, envir = .GlobalEnv)
-        assign("cihi_dins_non_y", cihi_dins_non_y, envir = .GlobalEnv)
-        assign("cihi_dins_excluded", cihi_dins_excluded, envir = .GlobalEnv)
-        assign("dpd_cihi", dpd_cihi, envir = .GlobalEnv)
-        assign("cihi_dpd", cihi_dpd, envir = .GlobalEnv)
-        assign("cihi_atc_y_candidates", cihi_atc_y_merged, envir = .GlobalEnv)
         run_merged(merged)
-        assign("merged", merged, envir = .GlobalEnv)
         
         write_run_outputs(merged)
         
@@ -2426,10 +2362,6 @@ server <- function(input, output, session) {
     selected_formulary <<- character(0)
     selected_public_programs <<- character(0)
     
-    assign("input_din_list", FALSE, envir = .GlobalEnv)
-    assign("selected_benefit", selected_benefit, envir = .GlobalEnv)
-    assign("selected_formulary", selected_formulary, envir = .GlobalEnv)
-    assign("selected_public_programs", selected_public_programs, envir = .GlobalEnv)
   }
   
   observeEvent(input$page6_reuse_datasets_btn, {
@@ -2689,7 +2621,6 @@ server <- function(input, output, session) {
         )
       }
       
-      assign("run_output_dir", run_output_dir, envir = .GlobalEnv)
       log_event(
         "INFO",
         "run_outputs_written",
