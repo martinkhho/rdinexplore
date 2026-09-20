@@ -429,13 +429,13 @@ server <- function(input, output, session) {
         problem_cols <- dpd_problem_cols(merged)
         run_problem_cols(problem_cols)
         run_merged(merged)
+        refresh_provenance_dates()
         write_run_outputs(merged, problem_cols)
         log_event("INFO", "run_complete", list(merged_rows = nrow(merged), merged_cols = ncol(merged)))
 
         incProgress(1, detail = "Done")
       })
 
-      refresh_provenance_dates()
       current_page("2_end")
     }, error = function(e) {
       msg <- conditionMessage(e)
@@ -684,7 +684,7 @@ server <- function(input, output, session) {
           ),
           tags$div(
             strong("Warning:"),
-            " Only the current status of the drug is recorded in this file (if the DPD had multiple statuses on the same day, a tiebreaker was applied that prioritized CANCELLED statuses over DORMANT, MARKETED, or APPROVED). If you wish to explore historical statuses, use the raw DPD status files in the /data folder."
+            " Only the latest status of the drug is recorded in this file (if the DPD had multiple statuses on the same day, a tiebreaker was applied that prioritized CANCELLED statuses over DORMANT, MARKETED, or APPROVED). If you wish to explore historical statuses, use the raw DPD status files in the /data folder."
           )
         ),
         downloadButton("page2_download_merged", "Download DPD (CSV)"),
